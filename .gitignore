@@ -1,5 +1,5 @@
-Docker*
-*.txt
 .env
 *.env
 blogenv
+__pycache__
+__*__
