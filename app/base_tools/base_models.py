@@ -6,21 +6,6 @@ ContentT = TypeVar("ContentT", bound="AbsContent", contravariant=True)
 ContentVT = TypeVar("ContentVT", bound="AbsContent", covariant=True)
 
 
-class _Moderatable(ABC):
-    """interface for users activity - like, comment, etc
-    Like, dislike, comment should use that interface."""
-
-    @abstractmethod
-    async def accept(self) -> None:
-        """send exact event type to system bus."""
-        pass
-
-    @abstractmethod
-    async def decline(self) -> None:
-        """decline action and send exact event to bus."""
-        pass
-
-
 class AbsContent(ABC):
     """Content interface."""
 
