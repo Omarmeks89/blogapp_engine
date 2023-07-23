@@ -1,6 +1,5 @@
 import asyncio
 
-
 from base_tools.handler_interfaces import BaseCmdHandler
 from base_tools.exceptions import DBError, HandlerError, ValidationError
 from .services import validator
