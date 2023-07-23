@@ -1,111 +1,97 @@
 import asyncio
-import datetime
-from typing import Any
 
-from base_tools.exceptions import DBError, CacheError, ModerationError
 from .services import mod_service
-from .messages import DBerrorNotification, CacheErrorNotification
+from base_tools.handler_interfaces import BaseCmdHandler
+from base_tools.exceptions import DBError, HandlerError
+from .exceptions import ModerationError
+from .messages import (
+        PostRejected,
+        PostAccepted,
+        StartModeration,
+        SetModerationResult,
+        )
 
 
-class FinalizeModerationHandler:
+class SetPostModerationResHandler(BaseCmdHandler):
     """handler use current domain services
         to made work."""
-    def __init__(self, uow: UOW) -> None:
-        super().__init__(uow)
 
-    async def handle(self, fin_cmd: Any) -> None:
-        """Finalize Moderation."""
+    async def handle(self, cmd: SetModerationResult) -> None:
+        """Set block moderation result"""
         async with self._uow as operator:
-            moderbl = await operator.cache.get(fin_cmd.record_id)
-            task = asyncio.create_task
-            if moderbl is None:
-                raise ModerationError("No moderation block found.")
-            # should it be async?
-            event, moderbl = mod_service.finalize_moderation(fin_cmd, moderbl)
-            store_task = task(operator.storage.update(
-                    fin_cmd.record_id,
-                    moderbl
-                    ))
-            cache_task = task(operator.cache.remove(fin_cmd.record_id))
-            tasks = (store_task, cache_task,)
-            curr_group = asyncio.gather(*tasks)
+            mcr = await operator.cache.get(cmd.mcr_id)
             try:
-                await curr_group
+                await mod_service.set_moderation_result(cmd, mcr)
+            except ModerationError as err:
+                raise HandlerError from err
+            for _ in len(mod_service.events) - 1:
+                self._uow.fetch_event(mod_service.dump_event())
+        return None
+
+
+class BeginPostModerationHandler(BaseCmdHandler):
+    """ react on Task Accepted."""
+
+    async def handle(self, cmd: StartModeration) -> None:
+        """We`re waiting and react on StartModeration command.
+
+            *mcr -> moderation_ctrl_block.
+        """
+        async with self._uow as operator:
+            mcr = self._task(mod_service.make_mcr(cmd.pub_id, cmd.blocks))
+            mod_events = self._task(mod_service.build_mod_events(cmd.blocks))
+            s_task = self._task(operator.storage.set_on_moderation(cmd.pub_id))
+            tasks = (mcr, mod_events, s_task)
+            try:
+                await asyncio.gather(*tasks)
             except DBError as err:
-                time = datetime.now()
                 for task in tasks:
-                    task.cancel()
-                logger.error(err)
-                if not operator.cache.get(fin_cmd.record_id):
-                    await operator.cache.push(
-                        moderbl.content_id,
-                        moderbl,
-                    )
-                event = DBErrorNotification(
-                    time=time,
-                    error=err,
-                    record_id=moderbl.content_id,
-                    )
-                self._uow.fetch_event(event)
-                return None
-            except CacheError as err:
-                time = datetime.now()
-                for task in tasks:
-                    task.cancel()
-                logger.error(err)
-                self._uow.fetch_event(event=CacheErrorNotification(
-                        time=time,
-                        error=err,
-                        record=moderbl.content_id,
-                        )
-                    )
-                return None
-            self._uow.fetch_event(event)
+                    if not task.done():
+                        task.cancel()
+                raise HandlerError from err
+            for _ in len(mod_service.events) - 1:
+                self._uow.fetch_event(mod_service.dump_event())
         return None
 
 
-class BeginModerationHandler(BaseCmdHandler):
-    """handler use current domain services
-        to made work."""
-    def __init__(self, uow: UOW) -> None:
-        super().__init__(uow)
+class FixPostAcceptedHandler(BaseCmdHandler):
+    """react if PostAccepted event was produced."""
 
-    async def handle(self, cmd: Any) -> None:
-        """statr moderation."""
+    async def handle(self, event: PostAccepted) -> None:
         async with self._uow as operator:
-            task = asyncio.create_task
-            content = operator.storage.load(cmd.content_id)
-            mod_ctrl_record = mod_service.make_ctrl_record(content)
-            c_blocks = mod_service.build_control_blocks(content)
-            content.on_moderation()
-            store_task = task(operator.storage.update(content))
-            cache_task = task(
-                operator.cache.push(
-                    mod_ctrl_record.content_id,
-                    mod_ctrl_record,
-                    )
+            upd_state_task = self._task(
+                operator.storage.set_as_accepted(event.pub_id),
                 )
-            tasks = (store_task, cache_task,)
-            curr_group = asyncio.gather(*tasks)
+            accept = self._task(mod_service.accept_publication(event.pub_id))
+            tasks = (upd_state_task, accept)
             try:
-                await curr_group
-            except (DBError, CacheError) as err:
-                logger.error(err)
-                for task in tasks:
-                    task.cancel()
-                return None
-            for block in c_blocks:
-                event = ContentBlockCreated(
-                    id=mod_ctrl_record.content_id,
-                    kind=block.kind,
-                    content=block,
-                    result=mstate.NOTSET,
-                    )
-                self._uow.fetch_event(event)
+                await asyncio.gather(*tasks)
+            except DBError as err:
+                await operator.storage.rollback_last()
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                raise HandlerError from err
+            for _ in len(mod_service.events) - 1:
+                self._uow.fetch_event(mod_service.dump_event())
         return None
 
 
-class LikeModerationHandler(BaseCmdHandler):
+class FixPostRejectedHandler(BaseCmdHandler):
+    """react if PostRejected event was produced."""
 
-    def __init__(self, uow: UOW) -> None:
-        super().__init__(uow)
+    async def handle(self, event: PostRejected) -> None:
+        async with self._uow as operator:
+            upd_state_task = self._task(
+                operator.storage.set_as_rejected(event.pub_id),
+                )
+            reject = self._task(mod_service.reject_publication(event.pub_id))
+            tasks = (upd_state_task, reject)
+            try:
+                await asyncio.gather(*tasks)
+            except DBError as err:
+                await operator.storage.rollback_last()
+                raise HandlerError from err
+            for _ in len(mod_service.events) - 1:
+                self._uow.fetch_event(mod_service.dump_event())
+        return None
