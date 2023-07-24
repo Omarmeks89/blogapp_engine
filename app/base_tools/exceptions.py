@@ -6,3 +6,8 @@ class SerializationError(BaseException):
 class PublicationError(Exception):
     """can`t finish operation with publication object."""
     pass
+
+
+class BusError(Exception):
+    """bus can`t operate."""
+    pass

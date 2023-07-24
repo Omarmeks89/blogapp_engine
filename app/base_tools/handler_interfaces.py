@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypeAlias, Any
+from typing import TypeAlias, Any, Generator
 from asyncio import create_task
 
 from .base_types import CVEventT, CEventT
@@ -63,6 +63,11 @@ class BaseCmdHandler(ABC):
     def __init__(self, uow: BaseUOW) -> None:
         self._uow = uow
         self._task = create_task
+
+    @property
+    def events(self) -> Generator:
+        while self._uow.events:
+            yield self._uow.get_event()
 
     @abstractmethod
     async def handle(self, cmd: InvariantCmd) -> None:

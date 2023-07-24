@@ -1,12 +1,22 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from datetim import datetime
+from datetime import datetime
 from typing import TypeAlias, Union, Literal
 
-from .actions import ModerationRes, _Serializable
+from actions import ModerationRes, _Serializable
+
+
+__all__ = (
+        "LinkT",
+        "SysMsgT",
+        "_ContentBlock",
+        "_SimpleAction",
+        "_PublicationStatistic",
+        )
 
 
 LinkT: TypeAlias = Union[Path, str]
+SysMsgT: TypeAlias = Union["_Event", "_Command"]
 PubAttr = Literal["pub"]
 
 
@@ -33,6 +43,18 @@ class _SimpleAction:
     producer: str
     pub_id: str
     action_dt: datetime
+
+
+@dataclass
+class _Event:
+    """root Event class."""
+    pass
+
+
+@dataclass
+class _Command:
+    """root class for commands."""
+    pass
 
 
 @dataclass
