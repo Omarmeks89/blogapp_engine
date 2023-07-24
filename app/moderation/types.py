@@ -6,13 +6,13 @@ from base_tools.actions import _Moderatable, _Serializable
 
 
 @dataclass
-class TextContent(_Moderatable, _ContentBlock):
+class TextBlock(_Moderatable, _ContentBlock):
     """type for text content block representation."""
     link: LinkT = ""
 
 
 @dataclass
-class PictureContent(_Moderatable, _ContentBlock):
+class PictureBlock(_Moderatable, _ContentBlock):
     """type for image content representation."""
     pass
 

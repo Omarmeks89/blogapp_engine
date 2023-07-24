@@ -8,7 +8,7 @@ from .exceptions import SerializationError
 
 JSONFmt: TypeAlias = str
 _SerializableT = TypeVar("_SerializableT", covariant=True)
-StateAttr = Literal["state"]
+StateAttr = Literal["_state"]
 
 
 class ModerationRes(str, Enum):
@@ -35,12 +35,10 @@ class _Serializable(ABC):
 class _Moderatable(ABC):
     """interface for moderation. FSM"""
 
-    state: ModerationRes = ModerationRes.NOT_SET
-
     def accept(self) -> None:
-        if self.state != ModerationRes.DECLINED and hasattr(self, StateAttr):
-            self.state = ModerationRes.ACCEPTED
+        if hasattr(self, StateAttr) and self._state != ModerationRes.DECLINED:
+            self._state = ModerationRes.ACCEPTED
 
     def decline(self) -> None:
-        if self.state != ModerationRes.ACCEPTED and hasattr(self, StateAttr):
-            self.state = ModerationRes.DECLINED
+        if hasattr(self, StateAttr) and self._state != ModerationRes.ACCEPTED:
+            self._state = ModerationRes.DECLINED

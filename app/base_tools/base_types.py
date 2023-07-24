@@ -17,10 +17,14 @@ class _ContentBlock(_Serializable):
     mcode: str
     pub_id: str
     link: LinkT
-    state: str = field(default_factory=str)
+    _state: str = field(default_factory=str)
 
     def __post_init__(self) -> None:
-        self.state = ModerationRes.NOT_SET
+        self._state = ModerationRes.NOT_SET
+
+    @property
+    def state(self) -> ModerationRes:
+        return self._state
 
 
 @dataclass

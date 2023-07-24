@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Optional
+from typing import TypeVar, Generator
 
 
 ContentT = TypeVar("ContentT", bound="AbsContent", contravariant=True)
@@ -33,33 +33,23 @@ class AbsContent(ABC):
 
 class AbsPublication(ABC):
     """interface for posts and comments"""
-    @property
+
     @abstractmethod
-    async def content(self) -> ContentVT:
-        """show content to moderator."""
+    def events(self) -> Generator:
+        """return events by one."""
         pass
 
     @abstractmethod
-    async def add_content(self, content: ContentT) -> None:
-        """add content to created comment or post"""
+    def edit(self) -> None:
+        """edit post. Get content blocks to edit."""
         pass
 
     @abstractmethod
-    async def remove_content(self) -> None:
-        """remove all content block from publication at all."""
-        pass
-
-    @abstractmethod
-    async def remove(self) -> None:
+    def remove(self) -> None:
         """remove current publication."""
         pass
 
     @abstractmethod
-    async def save_as_template(self) -> None:
-        """save current publication template."""
-        pass
-
-    @abstractmethod
-    async def publish(self, *, cov_letter: Optional[ContentT] = None) -> None:
-        """send to publication, can add cover letter or text preview."""
+    def moderate(self) -> None:
+        """send to publication"""
         pass
