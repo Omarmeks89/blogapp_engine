@@ -11,7 +11,7 @@ from base_tools.base_moderation import McodeSize, generate_mcode
 
 
 @dataclass
-class TextContent(_Moderatable, _ContentBlock):
+class TextBlock(_Moderatable, _ContentBlock):
     """type for text content block representation."""
     pass
 
@@ -24,7 +24,7 @@ def make_text_block(
         ) -> _ContentBlock:
     """factory func."""
     code = generate_mcode(symblos_cnt=codelen)
-    return TextContent(
+    return TextBlock(
             uid=uid,
             mcode=code,
             payload=payload,
