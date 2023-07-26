@@ -1,22 +1,34 @@
+from dataclasses import dataclass
 from typing import Optional
-from typing import TypeVar
-from datetime import datetime
 
+from base_tools.base_types import IntervalT
+from base_tools.base_moderation import _ContentBlock
 from base_tools.base_content import PostStatus, BasePublication, PubFSM_T
+from base_tools.base_content import CommentStatus
 from base_tools.exceptions import PublicationError
 from base_tools.actions import _Moderatable
-from .types import (
-        PostDeleted,
-        PostRolledToDraft,
-        ModerationStarted,
-        PostAccepted,
-        PostRejected,
-        PostPublished,
-        ActivateLater,
+from base_tools.base_moderation import McodeSize, generate_mcode
+
+
+@dataclass
+class TextContent(_Moderatable, _ContentBlock):
+    """type for text content block representation."""
+    pass
+
+
+def make_text_block(
+        uid: str,
+        payload: str,
+        *,
+        codelen: int = McodeSize.MIN_8S,
+        ) -> _ContentBlock:
+    """factory func."""
+    code = generate_mcode(symblos_cnt=codelen)
+    return TextContent(
+            uid=uid,
+            mcode=code,
+            payload=payload,
         )
-
-
-IntervalT = TypeVar("IntervalT", bound=datetime,  contravariant=True)
 
 
 class BlogPost(_Moderatable, BasePublication):
@@ -29,11 +41,10 @@ class BlogPost(_Moderatable, BasePublication):
             uid: str,
             author_id: str,
             title: str,
-            creation_dt: datetime,
+            creation_dt: IntervalT,
             *,
             state: Optional[PostStatus] = None,
             ) -> None:
-        """set model from ORM model."""
         super().__init__()
         self._uid = uid
         self._author_id = author_id
@@ -109,3 +120,62 @@ class BlogPost(_Moderatable, BasePublication):
                     )
             return None
         raise PublicationError("Can`t activate post that wasn`t accepted.")
+
+
+class BlogComment(_Moderatable, BasePublication):
+    """not copied to repo."""
+
+    _fsm: PubFSM_T = CommentStatus
+
+    def __init__(
+            self,
+            uid: str,
+            pub_id: str,
+            author_id: str,
+            creation_dt: IntervalT,
+            *,
+            state: Optional[CommentStatus] = None,
+            ) -> None:
+        """set model from ORM model."""
+        super().__init__()
+        self._uid = uid
+        self._pub_id = pub_id
+        self._author_id = author_id
+        self._creation_dt = creation_dt
+
+    def remove(self) -> None:
+        """remove current publication."""
+        if self._state in (self._fsm.DRAFT, self._fsm.PUBLISHED):
+            self._state = self._fsm.DELETED
+            self._events.append(
+                    CommentDeleted(pub_id=self._pub_id, uid=self._uid),
+                )
+        raise Exception("Can`t remove comment")
+
+    def moderate(self) -> None:
+        """send to publication"""
+        if self._state == self._fsm.DRAFT:
+            self._state = self._fsm.MODERATION
+            self._events.append(
+                    StartCommentModeration(pub_id=self._pub_id, uid=self._uid),
+                )
+            return None
+        raise Exception(f"Can`t moderate comment with state: {self._state}")
+
+    def accept(self) -> None:
+        if self._state == self._fsm.MODERATION:
+            self._state = self._fsm.PUBLISHED
+            self._events.append(
+                    CommentPublished(pub_id=self._pub_id, uid=self._uid),
+                )
+            return None
+        raise Exception("Can`t accept comment that isn`t on moderation.")
+
+    def decline(self) -> None:
+        """rollback to draft for correct content."""
+        if self._state == self._fsm.MODERATION:
+            self._state = self._fsm.DRAFT
+            self._events.append(
+                    CommentRejected(pub_id=self._pub_id, uid=self._uid),
+                )
+            return None

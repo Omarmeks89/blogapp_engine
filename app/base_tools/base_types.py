@@ -1,40 +1,18 @@
 from dataclasses import dataclass, field
-from pathlib import Path
 from datetime import datetime
-from typing import TypeAlias, Union, Literal
-
-from actions import ModerationRes, _Serializable
+from typing import TypeAlias, Union, TypeVar
 
 
 __all__ = (
-        "LinkT",
         "SysMsgT",
-        "_ContentBlock",
         "_SimpleAction",
         "_PublicationStatistic",
         )
 
 
-LinkT: TypeAlias = Union[Path, str]
 SysMsgT: TypeAlias = Union["_Event", "_Command"]
-PubAttr = Literal["pub"]
-
-
-@dataclass
-class _ContentBlock(_Serializable):
-    """mcode - random unique str as moderation key."""
-    id: str
-    mcode: str
-    pub_id: str
-    link: LinkT
-    _state: str = field(default_factory=str)
-
-    def __post_init__(self) -> None:
-        self._state = ModerationRes.NOT_SET
-
-    @property
-    def state(self) -> ModerationRes:
-        return self._state
+IntervalT = TypeVar("IntervalT", bound=datetime,  contravariant=True)
+PubAttr: str = "pub"
 
 
 @dataclass

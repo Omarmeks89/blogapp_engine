@@ -1,34 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generator
 
+from base_types import _ContentBlock
+
 
 ContentT = TypeVar("ContentT", bound="AbsContent", contravariant=True)
 ContentVT = TypeVar("ContentVT", bound="AbsContent", covariant=True)
-
-
-class AbsContent(ABC):
-    """Content interface."""
-
-    @abstractmethod
-    async def add_new_block(self, content: ContentT) -> None:
-        """add new block of text, video or picture content
-        to post or comment."""
-        pass
-
-    @abstractmethod
-    async def remove_block(self, c_block: ContentT) -> None:
-        """remove selected content block."""
-        pass
-
-    @abstractmethod
-    async def save(self) -> None:
-        """save current content state."""
-        pass
-
-    @abstractmethod
-    async def edit(self) -> None:
-        """edit current content block."""
-        pass
+AnyPayloadT = TypeVar("AnyPayloadT", contravariant=True)
 
 
 class AbsPublication(ABC):
@@ -40,11 +18,6 @@ class AbsPublication(ABC):
         pass
 
     @abstractmethod
-    def edit(self) -> None:
-        """edit post. Get content blocks to edit."""
-        pass
-
-    @abstractmethod
     def remove(self) -> None:
         """remove current publication."""
         pass
@@ -52,4 +25,19 @@ class AbsPublication(ABC):
     @abstractmethod
     def moderate(self) -> None:
         """send to publication"""
+        pass
+
+
+class AbsContent(ABC):
+    """Content interface."""
+
+    @classmethod
+    @abstractmethod
+    def make_block(cls, mcode: str) -> _ContentBlock:
+        """return content_block for moderation purp."""
+        pass
+
+    @abstractmethod
+    def set_body(self, payload: AnyPayloadT) -> None:
+        """payload can be text or link -> all are strings."""
         pass

@@ -1,6 +1,6 @@
 from abc import ABC
 from enum import Enum
-from typing import TypeVar, TypeAlias, Literal
+from typing import TypeVar, TypeAlias
 import json
 
 from .exceptions import SerializationError
@@ -8,7 +8,7 @@ from .exceptions import SerializationError
 
 JSONFmt: TypeAlias = str
 _SerializableT = TypeVar("_SerializableT", covariant=True)
-StateAttr = Literal["_state"]
+StateAttr: str = "_state"
 
 
 class ModerationRes(str, Enum):

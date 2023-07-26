@@ -2,10 +2,12 @@ from abc import abstractmethod
 from typing import TypeAlias
 from typing import Union
 from typing import Generator
-from typing import Literal
 from enum import Enum
+from dataclasses import dataclass, field
 
-from .base_models import AbsPublication
+from .base_models import AbsPublication, AbsContent
+from .base_moderation import _ContentBlock
+from .base_types import IntervalT
 from .exceptions import PublicationError
 
 
@@ -28,7 +30,7 @@ class CommentStatus(int, Enum):
 
 
 PubFSM_T: TypeAlias = Union[CommentStatus, PostStatus]
-StateKwargT = Literal["state"]
+StateKwarg: str = "state"
 
 
 class BasePublication(AbsPublication):
@@ -36,7 +38,7 @@ class BasePublication(AbsPublication):
     _fsm: PubFSM_T
 
     def __init__(self, *args, **kwargs) -> None:
-        state = kwargs.get(StateKwargT)
+        state = kwargs.get(StateKwarg)
         if state is None:
             self._state = self._fsm.DRAFT
         else:
@@ -52,11 +54,6 @@ class BasePublication(AbsPublication):
         while self._events:
             yield self._events.popleft()
 
-    def edit(self) -> None:
-        """edit post. Get content blocks to edit."""
-        if self._state != self._fsm.DRAFT:
-            raise PublicationError("Can`t edit locked publication")
-
     @abstractmethod
     def remove(self) -> None:
         """remove current publication."""
@@ -65,4 +62,21 @@ class BasePublication(AbsPublication):
     @abstractmethod
     def moderate(self) -> None:
         """send to publication"""
+        pass
+
+
+@dataclass
+class BaseContentPreset(AbsContent):
+    uid: str
+    pub_id: str
+    creation_dt: IntervalT
+    body: str = field(default_factory=str)
+
+    def set_body(self, payload: str) -> str:
+        self.body = payload
+
+    @classmethod
+    @abstractmethod
+    def make_block(cls, mcode: str) -> _ContentBlock:
+        """return content_block for moderation purp."""
         pass
