@@ -40,6 +40,6 @@ class LikeValidationHandler(BaseCmdHandler):
                 await asyncio.gather(valid_res)
             except ValidationError as err:
                 raise HandlerError from err
-            for _ in len(validator.events) - 1:
+            for _ in range(len(validator.events)):
                 self._uow.fetch_event(validator.dump_event())
         return None

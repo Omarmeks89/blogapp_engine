@@ -1,9 +1,8 @@
 import asyncio
 
 from .services import mod_service
-from base_tools.handler_interfaces import BaseCmdHandler
-from base_tools.exceptions import DBError, HandlerError
-from .exceptions import ModerationError
+from db.base_uow import BaseCmdHandler
+from base_tools.exceptions import DBError, HandlerError, ModerationError
 from .messages import (
         PostRejected,
         PostAccepted,
@@ -13,8 +12,6 @@ from .messages import (
 
 
 class SetPostModerationResHandler(BaseCmdHandler):
-    """handler use current domain services
-        to made work."""
 
     async def handle(self, cmd: SetModerationResult) -> None:
         """Set block moderation result"""
@@ -24,7 +21,7 @@ class SetPostModerationResHandler(BaseCmdHandler):
                 await mod_service.set_moderation_result(cmd, mcr)
             except ModerationError as err:
                 raise HandlerError from err
-            for _ in len(mod_service.events) - 1:
+            for _ in range(len(mod_service.events)):
                 self._uow.fetch_event(mod_service.dump_event())
         return None
 
@@ -49,7 +46,7 @@ class BeginPostModerationHandler(BaseCmdHandler):
                     if not task.done():
                         task.cancel()
                 raise HandlerError from err
-            for _ in len(mod_service.events) - 1:
+            for _ in range(len(mod_service.events)):
                 self._uow.fetch_event(mod_service.dump_event())
         return None
 
@@ -72,7 +69,7 @@ class FixPostAcceptedHandler(BaseCmdHandler):
                     if not t.done():
                         t.cancel()
                 raise HandlerError from err
-            for _ in len(mod_service.events) - 1:
+            for _ in range(len(mod_service.events)):
                 self._uow.fetch_event(mod_service.dump_event())
         return None
 
@@ -92,6 +89,6 @@ class FixPostRejectedHandler(BaseCmdHandler):
             except DBError as err:
                 await operator.storage.rollback_last()
                 raise HandlerError from err
-            for _ in len(mod_service.events) - 1:
+            for _ in range(len(mod_service.events)):
                 self._uow.fetch_event(mod_service.dump_event())
         return None

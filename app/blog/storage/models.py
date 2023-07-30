@@ -1,40 +1,29 @@
-from dataclasses import dataclass
 from typing import Optional
 
 from base_tools.base_types import IntervalT
-from base_tools.base_moderation import _ContentBlock
-from base_tools.base_content import PostStatus, BasePublication, PubFSM_T
+from base_tools.base_content import PostStatus, BasePublication
 from base_tools.base_content import CommentStatus
 from base_tools.exceptions import PublicationError
 from base_tools.actions import _Moderatable
-from base_tools.base_moderation import McodeSize, generate_mcode
-
-
-@dataclass
-class TextBlock(_Moderatable, _ContentBlock):
-    """type for text content block representation."""
-    pass
-
-
-def make_text_block(
-        uid: str,
-        payload: str,
-        *,
-        codelen: int = McodeSize.MIN_8S,
-        ) -> _ContentBlock:
-    """factory func."""
-    code = generate_mcode(symblos_cnt=codelen)
-    return TextBlock(
-            uid=uid,
-            mcode=code,
-            payload=payload,
+from blog.messages import (
+        PostDeleted,
+        PostRolledToDraft,
+        ModerationStarted,
+        PostAccepted,
+        PostRejected,
+        PostPublished,
+        ActivateLater,
+        CommentDeleted,
+        CommentPublished,
+        CommentRejected,
+        StartCommentModeration,
         )
 
 
 class BlogPost(_Moderatable, BasePublication):
     """Can build from ORM model."""
 
-    _fsm: PubFSM_T = PostStatus
+    _fsm: PostStatus = PostStatus.INIT
 
     def __init__(
             self,
@@ -56,7 +45,7 @@ class BlogPost(_Moderatable, BasePublication):
             raise PublicationError("Can`t delete removed or processed post.")
         self._state = self._fsm.DELETED
         self._events.append(
-            PostDeleted(uid=self._uid),
+            PostDeleted(pub_id=self._uid),
             )
 
     def rollback_to_draft(self) -> None:
@@ -64,7 +53,7 @@ class BlogPost(_Moderatable, BasePublication):
         if self._state in (self._fsm.REJECTED, self._fsm.ACCEPTED):
             self._state = self._fsm.DRAFT
             self._events.append(
-                PostRolledToDraft(uid=self._uid),
+                PostRolledToDraft(pub_id=self._uid),
                 )
         return None
 
@@ -82,7 +71,7 @@ class BlogPost(_Moderatable, BasePublication):
                 )
             return None
         raise PublicationError(
-                f"Can`t set on moderation. Curr status: {self._status}",
+                f"Can`t set on moderation. Curr status: {self._state}",
                 )
 
     def accept(self) -> None:
@@ -113,10 +102,10 @@ class BlogPost(_Moderatable, BasePublication):
         if self._state == self._fsm.ACCEPTED:
             self._state = self._fsm.PUBLISHED
             if act_dt_interval is None:
-                self._events.append(PostPublished(uid=self._uid))
+                self._events.append(PostPublished(pub_id=self._uid))
             else:
                 self._events.append(
-                    ActivateLater(uid=self._uid, delay_dt=act_dt_interval),
+                    ActivateLater(pub_id=self._uid, delay_dt=act_dt_interval),
                     )
             return None
         raise PublicationError("Can`t activate post that wasn`t accepted.")
@@ -125,7 +114,7 @@ class BlogPost(_Moderatable, BasePublication):
 class BlogComment(_Moderatable, BasePublication):
     """not copied to repo."""
 
-    _fsm: PubFSM_T = CommentStatus
+    _fsm: CommentStatus = CommentStatus.INIT
 
     def __init__(
             self,

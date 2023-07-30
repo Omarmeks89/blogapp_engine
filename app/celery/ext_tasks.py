@@ -7,4 +7,9 @@ app.conf.update(
         accept_content="json",
         )
 
+
+@app.task
+def ret(x: int, y: int) -> int:
+    return x * y
+
 # or app.celeryconfig(confmod.py)

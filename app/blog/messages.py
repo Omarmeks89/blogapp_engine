@@ -1,45 +1,96 @@
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 
-
-class ContentTypes(str, Enum):
-    TEXT: str = "text"
-    VIDEO: str = "video"
-    AUDIO: str = "audio"
-    IMAGE: str = "image"
+from base_tools.base_content import ContentTypes
+from base_tools.base_types import Command, Event
 
 
 @dataclass
-class StartModeration:
-    """block example (ContentBlockT):
-    {block_id: block_type}
-    We use author_id and pub_id
-    to create path for S3 server.
-    We`ll getting content from S3,
-    not from DB. If text is bigger
-    as 2048 bytes, it will be saved as
-    text file on S3 server to.
-    """
+class StartModeration(Command):
     pub_id: str
     author_id: str
     act_dt: datetime
-    blocks: list[dict[str, ContentTypes]]
+    blocks: dict[str, ContentTypes]
 
 
 @dataclass
-class PostAccepted:
+class PostAccepted(Event):
     pub_id: str
 
 
 @dataclass
-class PostRejected:
+class PostRejected(Event):
     pub_id: str
 
 
 @dataclass
-class SetModerationResult:
+class PostDeleted(Event):
+    pub_id: str
+
+
+@dataclass
+class PostRolledToDraft(Event):
+    pub_id: str
+
+
+@dataclass
+class PostPublished(Event):
+    pub_id: str
+
+
+@dataclass
+class ActivateLater(Command):
+    pub_id: str
+    delay_dt: datetime
+
+
+@dataclass
+class SetModerationResult(Command):
+    """fix new state in MCR."""
     mcr_id: str
     block_id: str
     state: str
     report: str
+
+
+@dataclass
+class ModerationStarted(Event):
+    pub_id: str
+    author_id: str
+    pub_title: str
+
+
+@dataclass
+class CommentDeleted(Event):
+    """
+    pub_id: publication id,
+    uid: unique id for comment.
+    """
+    pub_id: str
+    uid: str
+
+
+@dataclass
+class StartCommentModeration(Command):
+    """send current comment to moderation.
+    pub_id: publication id;
+    uid: unique comment id.
+    """
+    pub_id: str
+    uid: str
+
+
+@dataclass
+class CommentPublished(Event):
+    pub_id: str
+    uid: str
+
+
+@dataclass
+class CommentRejected(Event):
+    """event for notify service.
+    pub_id: publication id;
+    uid: unique comment id.
+    """
+    pub_id: str
+    uid: str

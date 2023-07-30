@@ -1,12 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generator
+from typing import TypeVar, Generator, Any
 
-from base_types import _ContentBlock
+from .base_moderation import _ContentBlock
 
 
 ContentT = TypeVar("ContentT", bound="AbsContent", contravariant=True)
 ContentVT = TypeVar("ContentVT", bound="AbsContent", covariant=True)
-AnyPayloadT = TypeVar("AnyPayloadT", contravariant=True)
+AnyPayloadT = TypeVar("AnyPayloadT", bound=Any, contravariant=True)
+
+
+class Model:
+    """empty root type."""
+    pass
 
 
 class AbsPublication(ABC):
@@ -35,6 +40,16 @@ class AbsContent(ABC):
     @abstractmethod
     def make_block(cls, mcode: str) -> _ContentBlock:
         """return content_block for moderation purp."""
+        pass
+
+    @property
+    @abstractmethod
+    def kind(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def description(self) -> dict[str, Any]:
         pass
 
     @abstractmethod

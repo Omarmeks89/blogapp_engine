@@ -4,11 +4,21 @@ from typing import Union
 from typing import Generator
 from enum import Enum
 from dataclasses import dataclass, field
+from datetime import datetime
 
-from .base_models import AbsPublication, AbsContent
+from .base_models import AbsPublication, AbsContent, Model
 from .base_moderation import _ContentBlock
-from .base_types import IntervalT
+from .base_types import SysMsgT
 from .exceptions import PublicationError
+
+
+__all__ = (
+        "PostStatus",
+        "CommentStatus",
+        "ContentTypes",
+        "BasePublication",
+        "BaseContentPreset",
+        )
 
 
 class PostStatus(int, Enum):
@@ -19,6 +29,7 @@ class PostStatus(int, Enum):
     ACCEPTED: int = 4
     REJECTED: int = 8
     DELETED: int = 16
+    INIT: int = 128
 
 
 class CommentStatus(int, Enum):
@@ -27,13 +38,22 @@ class CommentStatus(int, Enum):
     MODERATION: int = 1
     PUBLISHED: int = 2
     DELETED: int = 4
+    INIT: int = 64
+
+
+class ContentTypes(str, Enum):
+    NONE: str = "none"
+    TEXT: str = "text"
+    VIDEO: str = "video"
+    AUDIO: str = "audio"
+    IMAGE: str = "image"
 
 
 PubFSM_T: TypeAlias = Union[CommentStatus, PostStatus]
 StateKwarg: str = "state"
 
 
-class BasePublication(AbsPublication):
+class BasePublication(AbsPublication, Model):
 
     _fsm: PubFSM_T
 
@@ -45,7 +65,7 @@ class BasePublication(AbsPublication):
             self._state = state
         try:
             from collections import deque
-            self._events = deque()
+            self._events: deque[SysMsgT] = deque()
         except ImportError as err:
             raise PublicationError(f"Can`t import collections module: {err}")
 
@@ -69,11 +89,26 @@ class BasePublication(AbsPublication):
 class BaseContentPreset(AbsContent):
     uid: str
     pub_id: str
-    creation_dt: IntervalT
+    creation_dt: datetime
     body: str = field(default_factory=str)
+    _kind: ContentTypes = ContentTypes.NONE
 
-    def set_body(self, payload: str) -> str:
+    @abstractmethod
+    def __post_init__(self) -> None:
+        """define exact _kind."""
+        pass
+
+    @property
+    def kind(self) -> ContentTypes:
+        return self._kind
+
+    @property
+    def description(self) -> dict[str, ContentTypes]:
+        return {self.uid: self._kind}
+
+    def set_body(self, payload: str) -> None:
         self.body = payload
+        return None
 
     @classmethod
     @abstractmethod

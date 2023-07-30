@@ -2,8 +2,10 @@ from dataclasses import dataclass, field
 from string import ascii_letters, digits
 from random import choice
 from enum import Enum
+from typing import Union
+from typing import Any
 
-from actions import ModerationRes, _Serializable
+from .actions import ModerationRes, Serializable
 
 
 SYMBOLS: list[str] = [*ascii_letters, *digits, "-", "_"]
@@ -33,30 +35,28 @@ def generate_mcode(*, symblos_cnt: int = McodeSize.MIN_8S) -> str:
 
 
 @dataclass
-class _ContentBlock(_Serializable):
+class _ContentBlock(Serializable):
     """mcode - random unique str as moderation key."""
     uid: str
     mcode: str
     pub_id: str
-    _state: str = field(default_factory=str)
-
-    def __post_init__(self) -> None:
-        self._state = ModerationRes.NOT_SET
+    payload: Any
+    _state: ModerationRes = ModerationRes.NOT_SET
 
     @property
-    def state(self) -> str:
-        return self._state.value
+    def state(self) -> ModerationRes:
+        return self._state
 
 
 @dataclass
-class ModerationControlBlock(_Serializable):
+class ModerationControlBlock(Serializable):
     pub_id: str
-    blocks: dict[str, ModerationRes] = field(default_factory=dict)
+    blocks: dict[str, Union[str, ModerationRes]] = field(default_factory=dict)
 
     def register_block(self, block: _ContentBlock) -> None:
         """register content block."""
-        if block.id not in self.blocks:
-            self.blocks[block.id] = self.blocks.get(block.id, block.state)
+        if block.uid not in self.blocks:
+            self.blocks[block.uid] = self.blocks.get(block.uid, block.state)
 
     def set_moderation_result(self, block_id: str, result: str) -> None:
         """set each result after each block was moderated."""

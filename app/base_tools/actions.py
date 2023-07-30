@@ -1,13 +1,12 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
-from typing import TypeVar, TypeAlias
+from typing import TypeAlias
 import json
 
 from .exceptions import SerializationError
 
 
 JSONFmt: TypeAlias = str
-_SerializableT = TypeVar("_SerializableT", covariant=True)
 StateAttr: str = "_state"
 
 
@@ -20,11 +19,40 @@ class ModerationRes(str, Enum):
 class _Serializable(ABC):
     """INterface for serializable objects."""
 
+    @abstractmethod
+    def to_json(self) -> JSONFmt:
+        """convert inst to json str."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_json(cls, j_str: JSONFmt) -> "_Serializable":
+        """remoderation as example."""
+        pass
+
+
+class _Moderatable(ABC):
+    """interface for moderation. FSM"""
+
+    @abstractmethod
+    def accept(self) -> None:
+        """accept this object."""
+        pass
+
+    @abstractmethod
+    def decline(self) -> None:
+        """decline this object."""
+        pass
+
+
+class Serializable(_Serializable):
+    """INterface for serializable objects."""
+
     def to_json(self) -> JSONFmt:
         return json.dumps(self.__dict__, indent=4)
 
     @classmethod
-    def from_json(cls, j_str: JSONFmt) -> _SerializableT:
+    def from_json(cls, j_str: JSONFmt) -> "_Serializable":
         """remoderation as example."""
         try:
             return cls(**json.loads(j_str))
@@ -32,8 +60,10 @@ class _Serializable(ABC):
             raise SerializationError from err
 
 
-class _Moderatable(ABC):
+class ModeratableBlock(_Moderatable):
     """interface for moderation. FSM"""
+
+    _state: ModerationRes = ModerationRes.NOT_SET
 
     def accept(self) -> None:
         if hasattr(self, StateAttr) and self._state != ModerationRes.DECLINED:

@@ -5,18 +5,18 @@ from typing import TypeAlias, Union, TypeVar
 
 __all__ = (
         "SysMsgT",
-        "_SimpleAction",
+        "SimpleAction",
         "_PublicationStatistic",
         )
 
 
-SysMsgT: TypeAlias = Union["_Event", "_Command"]
+SysMsgT: TypeAlias = Union["Event", "Command"]
 IntervalT = TypeVar("IntervalT", bound=datetime,  contravariant=True)
 PubAttr: str = "pub"
 
 
 @dataclass
-class _SimpleAction:
+class SimpleAction:
     """simple template to represent any action."""
     producer: str
     pub_id: str
@@ -24,13 +24,13 @@ class _SimpleAction:
 
 
 @dataclass
-class _Event:
+class Event:
     """root Event class."""
     pass
 
 
 @dataclass
-class _Command:
+class Command:
     """root class for commands."""
     pass
 
