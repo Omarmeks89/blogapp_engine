@@ -37,6 +37,10 @@ def make_text_block(
 @dataclass
 class TextContent(BaseContentPreset):
 
+    def __post_init__(self) -> None:
+        """sex exact content type."""
+        self._kind = ContentTypes.TEXT
+
     @classmethod
     def make_block(cls, mcode: str) -> _ContentBlock:
         """make block with a content for moderation
