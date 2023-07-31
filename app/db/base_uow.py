@@ -3,10 +3,10 @@ from typing import Generator
 from typing import TypeAlias, Any
 from asyncio import create_task
 from contextlib import AbstractAsyncContextManager as AACM
+from typing import Protocol
 
 from base_tools.base_types import SysMsgT
-from .base_repositories import AbcRepository
-from .sessions import AbcSessionFactory
+from .sessions import AbcSessionFactory, Session
 
 
 AnyMsgInvarT: TypeAlias = Any
@@ -31,11 +31,19 @@ class AbstractUOW(AACM):
         pass
 
 
+class RepositoryProto(Protocol):
+    """Implementation for Duck typing in UOW."""
+
+    def attach_session(self, session: Session) -> None: ...
+
+    def detach_session(self) -> None: ...
+
+
 class BaseUOW(AbstractUOW):
 
     def __init__(
             self,
-            repository: AbcRepository,
+            repository: RepositoryProto,
             session_factory: AbcSessionFactory,
             ) -> None:
         self._repository = repository
@@ -61,7 +69,7 @@ class BaseUOW(AbstractUOW):
 
     @property
     @abstractmethod
-    def storage(self) -> AbcRepository:
+    def storage(self) -> RepositoryProto:
         """return instance of repository."""
         pass
 

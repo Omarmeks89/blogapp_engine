@@ -10,7 +10,6 @@ from base_tools.actions import ModeratableBlock
 @dataclass
 class TextBlock(ModeratableBlock, _ContentBlock):
     """type for text content block representation."""
-    payload: str
 
     def __post_init__(self) -> None:
         self._kind = ContentTypes.TEXT
@@ -30,7 +29,6 @@ def make_text_block(
             uid=uid,
             pub_id=pub_id,
             mcode=code,
-            payload=body,
             )
 
 
@@ -49,5 +47,4 @@ class TextContent(BaseContentPreset):
                 uid=cls.uid,
                 pub_id=cls.pub_id,
                 mcode=mcode,
-                payload=cls.body,
                 )

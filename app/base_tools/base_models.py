@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TypeVar, Generator, Any
 
 from .base_moderation import _ContentBlock
+from .actions import _Moderatable
 
 
 ContentT = TypeVar("ContentT", bound="AbsContent", contravariant=True)
@@ -14,7 +15,7 @@ class Model:
     pass
 
 
-class AbsPublication(ABC):
+class AbsPublication(_Moderatable, ABC):
     """interface for posts and comments"""
 
     @abstractmethod

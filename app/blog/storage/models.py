@@ -4,7 +4,6 @@ from base_tools.base_types import IntervalT
 from base_tools.base_content import PostStatus, BasePublication
 from base_tools.base_content import CommentStatus
 from base_tools.exceptions import PublicationError
-from base_tools.actions import _Moderatable
 from blog.messages import (
         PostDeleted,
         PostRolledToDraft,
@@ -20,7 +19,7 @@ from blog.messages import (
         )
 
 
-class BlogPost(_Moderatable, BasePublication):
+class BlogPost(BasePublication):
     """Can build from ORM model."""
 
     _fsm: PostStatus = PostStatus.INIT
@@ -111,7 +110,7 @@ class BlogPost(_Moderatable, BasePublication):
         raise PublicationError("Can`t activate post that wasn`t accepted.")
 
 
-class BlogComment(_Moderatable, BasePublication):
+class BlogComment(BasePublication):
     """not copied to repo."""
 
     _fsm: CommentStatus = CommentStatus.INIT

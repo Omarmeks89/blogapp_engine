@@ -3,7 +3,6 @@ from string import ascii_letters, digits
 from random import choice
 from enum import Enum
 from typing import Union
-from typing import Any
 
 from .actions import ModerationRes, Serializable
 
@@ -13,7 +12,7 @@ SYMBOLS: list[str] = [*ascii_letters, *digits, "-", "_"]
 
 __all__ = (
         "_ContentBlock",
-        "ModerationControlBlock",
+        "ModerationControlRecord",
         "McodeSize",
         "generate_mcode",
         )
@@ -40,7 +39,6 @@ class _ContentBlock(Serializable):
     uid: str
     mcode: str
     pub_id: str
-    payload: Any
     _state: ModerationRes = ModerationRes.NOT_SET
 
     @property
@@ -49,20 +47,35 @@ class _ContentBlock(Serializable):
 
 
 @dataclass
-class ModerationControlBlock(Serializable):
+class ModerationControlRecord(Serializable):
+    """MCR implementation. class that controlled
+    moderation process."""
     pub_id: str
     blocks: dict[str, Union[str, ModerationRes]] = field(default_factory=dict)
+    reports: list[str] = field(default_factory=list)
+
+    def finished(self) -> bool:
+        return len(self.reports) == len(self.blocks)
 
     def register_block(self, block: _ContentBlock) -> None:
         """register content block."""
         if block.uid not in self.blocks:
-            self.blocks[block.uid] = self.blocks.get(block.uid, block.state)
+            self.blocks[block.mcode] = self.blocks.get(
+                        block.mcode,
+                        block.state,
+                    )
 
-    def set_moderation_result(self, block_id: str, result: str) -> None:
+    def set_moderation_result(
+            self,
+            mcode: str,
+            res_state: str,
+            report: str,
+            ) -> None:
         """set each result after each block was moderated."""
-        if self.blocks[block_id] is not ModerationRes.NOT_SET:
-            raise Exception(f"Result for block: {block_id} is just set.")
-        self.blocks[block_id] = result
+        if self.blocks[mcode] is not ModerationRes.NOT_SET:
+            raise Exception(f"Result for block: {mcode} is just set.")
+        self.blocks[mcode] = res_state
+        self.reports.append(report)
 
     def done_success(self) -> bool:
         """return True if moderation was done with success."""

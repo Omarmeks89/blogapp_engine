@@ -31,3 +31,7 @@ class HandlerError(Exception):
 class ModerationError(Exception):
     """moderation process failed."""
     pass
+
+
+class BootstrapError(Exception):
+    """fail on app bootstrap."""
