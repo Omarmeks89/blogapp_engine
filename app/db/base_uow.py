@@ -1,37 +1,52 @@
 from abc import ABC, abstractmethod
 from typing import Generator
-from typing import TypeAlias, Any
+from typing import TypeVar
+from typing import Generic
+from typing import Any
 from asyncio import create_task
-from contextlib import AbstractAsyncContextManager as AACM
 from typing import Protocol
 
 from base_tools.base_types import SysMsgT
 from .sessions import AbcSessionFactory, Session
 
 
-AnyMsgInvarT: TypeAlias = Any
+AnyMsgInvarT = TypeVar("AnyMsgInvarT", bound=Any)
+RepoCV = TypeVar("RepoCV", contravariant=True)
+SessionCV = TypeVar("SessionCV", contravariant=True)
+UOWProtoT = TypeVar("UOWProtoT", bound="UOWProto", contravariant=True)
+T = TypeVar("T", bound="UOWProto", covariant=True)
 
 
-class AbstractUOW(AACM):
-
-    @abstractmethod
-    def fetch_event(self, event: SysMsgT) -> None:
-        pass
-
-    @abstractmethod
-    def get_events(self) -> Generator:
-        pass
+class UOWProto(ABC, Generic[RepoCV, SessionCV]):
+    """UOW type configuration. Build from Repo and Session."""
 
     @abstractmethod
-    async def commit(self) -> None:
-        pass
+    def __init__(self, repo: RepoCV, session: SessionCV) -> None: pass
+
+    @property
+    @abstractmethod
+    def storage(self) -> RepoCV: pass
 
     @abstractmethod
-    async def rollback(self) -> None:
-        pass
+    def fetch_event(self, event: SysMsgT) -> None: pass
+
+    @abstractmethod
+    def get_events(self) -> Generator: pass
+
+    @abstractmethod
+    async def __aenter__(self: T) -> T: pass
+
+    @abstractmethod
+    async def __aexit__(self, *args) -> None: pass
+
+    @abstractmethod
+    async def commit(self) -> None: pass
+
+    @abstractmethod
+    async def rollback(self) -> None: pass
 
 
-class RepositoryProto(Protocol):
+class Repository(Protocol):
     """Implementation for Duck typing in UOW."""
 
     def attach_session(self, session: Session) -> None: ...
@@ -39,15 +54,15 @@ class RepositoryProto(Protocol):
     def detach_session(self) -> None: ...
 
 
-class BaseUOW(AbstractUOW):
+class BaseUOW(UOWProto):
 
     def __init__(
             self,
-            repository: RepositoryProto,
-            session_factory: AbcSessionFactory,
+            repo: Repository,
+            session: AbcSessionFactory,
             ) -> None:
-        self._repository = repository
-        self._ses_fct = session_factory
+        self._repository = repo
+        self._ses_fct = session
         self._curr_ses = None
         try:
             from collections import deque
@@ -55,7 +70,7 @@ class BaseUOW(AbstractUOW):
         except ImportError:
             raise Exception
 
-    async def __aenter__(self) -> "BaseUOW":
+    async def __aenter__(self: T) -> T:
         self._curr_ses = self._ses_fct()
         self._repository.attach_session(self._curr_ses)
         return self
@@ -64,12 +79,11 @@ class BaseUOW(AbstractUOW):
         self._repository.detach_session()
         if self._curr_ses and hasattr(self._curr_ses, "close"):
             await self._curr_ses.close()
-        await super().__aexit__(*args)
         return None
 
     @property
     @abstractmethod
-    def storage(self) -> RepositoryProto:
+    def storage(self) -> Repository:
         """return instance of repository."""
         pass
 
@@ -93,10 +107,24 @@ class BaseUOW(AbstractUOW):
         return None
 
 
-class BaseCmdHandler(ABC):
+class Handler(ABC, Generic[UOWProtoT]):
+    """Handler interface."""
 
-    def __init__(self, uow: BaseUOW) -> None:
-        self._uow = uow
+    @abstractmethod
+    def __init__(self, uow: UOWProtoT) -> None: pass
+
+    @property
+    @abstractmethod
+    def events(self) -> Generator[SysMsgT]: pass
+
+    @abstractmethod
+    async def handle(self, cmd: AnyMsgInvarT) -> None: pass
+
+
+class BaseCmdHandler(Handler):
+
+    def __init__(self, uow: UOWProto) -> None:
+        self._uow: UOWProto[Repository, Session] = uow
         self._task = create_task
 
     @property

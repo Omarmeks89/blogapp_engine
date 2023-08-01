@@ -51,7 +51,7 @@ class PublicationModerator:
             ) -> None:
         """Need to parse SetModerationResult."""
         try:
-            mcr.set_moderation_result(mcode, state)
+            mcr.set_moderation_result(mcode, state, report)
             # if all blocks returned from moderation.
             if mcr.finished():
                 if mcr.done_success():
@@ -83,7 +83,7 @@ class PublicationModerator:
             mcr.register_block(block)
         cmd = AddToCache(uid=mcr.pub_id, payload=mcr.to_json())
         self._events.append(cmd)
-        return None
+        return mcr
 
     async def build_content_blocks(
             self,
