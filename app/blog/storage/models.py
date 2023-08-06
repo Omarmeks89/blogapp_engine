@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import BaseModel
 
 from base_tools.base_types import IntervalT
 from base_tools.base_content import PostStatus, BasePublication
@@ -19,6 +20,13 @@ from blog.messages import (
         )
 
 
+class FoundedPost(BaseModel):
+    """Test model."""
+    uid: str
+    author_id: str
+    title: str
+
+
 class BlogPost(BasePublication):
     """Can build from ORM model."""
 
@@ -34,10 +42,10 @@ class BlogPost(BasePublication):
             state: Optional[PostStatus] = None,
             ) -> None:
         super().__init__()
-        self._uid = uid
-        self._author_id = author_id
-        self._title = title
-        self._creation_dt = creation_dt
+        self.uid = uid
+        self.author_id = author_id
+        self.title = title
+        self.creation_dt = creation_dt
 
     def remove(self) -> None:
         if self._state in (self._fsm.DELETED, self._fsm.MODERATION):

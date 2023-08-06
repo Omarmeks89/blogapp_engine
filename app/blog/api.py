@@ -1,16 +1,16 @@
-from fastapi import APIRouter
+import asyncio
+from fastapi import APIRouter, HTTPException
 from fastapi import Depends
-from fastapi.responses import RedirectResponse, JSONResponse
-from fastapi import HTTPException
+from fastapi.responses import RedirectResponse
 
-from base_tools.base_models import BaseAuthor
-from base_tools.services import get_msg_bus, BaseChannel
-from base_tools.urls import urls
-from base_tools.dbengine import get_db_engine
-from base_tools.dbengine import BaseDBAdapter, DBEngineError, DBSearchError
-from .services import auth_service
-from .messages import PublishNewPost, ShowMyPostsRequest
-from .messages import SetModerationResult, PostsPreview
+from .messages import CreateNewPost, SaveNewPost
+from base_tools.base_moderation import generate_mcode, McodeSize
+from base_tools.bus import MsgBus
+from db.sessions import Session
+from .storage.repositories import PostsRepository
+from db.tables import publications
+from .storage.models import FoundedPost
+from config.config import get_bus
 
 
 __all__ = [
@@ -19,65 +19,58 @@ __all__ = [
 
 
 posts = APIRouter(prefix="/posts")
+session = Session()
+repo = PostsRepository(publications)
 
 
-@posts.post("/{post_id}")
-async def publish_new_post(
-        author: BaseAuthor = Depends(),
-        pub_cmd: PublishNewPost = Depends(),
-        msg_bus: BaseChannel = Depends(get_msg_bus),
+@posts.post("/new")
+async def create_new_post(
+        cmd: SaveNewPost,
+        bus: MsgBus = Depends(get_bus),
         ) -> RedirectResponse:
-    """send new post for moderation."""
-    if not await auth_service.is_authorized(author):
-        # redirect for auth
-        return RedirectResponse("https://127.0.0.1:8000/")
-    await msg_bus.register(pub_cmd)
-    return RedirectResponse(url="https://127.0.0.1:8000/")
+    int_cmd = CreateNewPost(
+            uid=generate_mcode(symblos_cnt=McodeSize.MIN_16S),
+            author_id=cmd.author_id,
+            title=cmd.title,
+            )
+    bus_task = asyncio.create_task(bus.handle(int_cmd))
+    await asyncio.gather(bus_task)
+    return RedirectResponse(f"/posts/{int_cmd.uid}", status_code=303)
 
 
-@posts.get("/{user_id}")  # [+] posts stat = active, mod, etc
-async def show_user_posts(
-        author: BaseAuthor = Depends(),
-        request: ShowMyPostsRequest = Depends(),
-        storage: BaseDBAdapter = Depends(get_db_engine),
-        ) -> PostsPreview:
-    """show my posts."""
-    if not await auth_service.is_authorized(author):
-        return RedirectResponse(url=urls.AUTH_PAGE)
-    try:
-        posts = await storage.get_posts(author.uid)
-    except DBEngineError:
-        raise HTTPException(
-                status_code=503,
-        )
-    except DBSearchError:
-        raise HTTPException(
-                status_code=404,
-        )
-    return posts
+@posts.get("/{pub_id}")
+async def get_post_by_id(pub_id: str) -> FoundedPost:
+    session = Session()
+    repo.attach_session(session)
+    post = repo.get_post_by_uid(pub_id)
+    if post:
+        founded = FoundedPost(
+                uid=post.uid,
+                author_id=post.author_id,
+                title=post.title,
+                )
+        session.commit()
+        repo.detach_session()
+        return founded
+    raise HTTPException(status_code=404, detail="BlogPost wasn`t found in DB")
 
 
 @posts.get("/")
-async def show_posts(
-        author: BaseAuthor = Depends(),
-        storage: BaseDBAdapter = Depends(get_db_engine),
-        ) -> PostsPreview:
-    """show all posts with pagination. auth nevermind"""
-    try:
-        posts = await storage.get_posts(author.uid)
-    except DBEngineError:
-        raise HTTPException(
-                status_code=404,
-        )
-    return posts
-
-
-@posts.post("/{post_id}/finalize")
-async def finalize_moderation(
-        fin_cmd: SetModerationResult = Depends(),
-        msg_bus: BaseChannel = Depends(get_msg_bus),
-        ) -> JSONResponse:
-    """fetch moderation result responce for part of content from external
-        service."""
-    await msg_bus.register(fin_cmd)
-    return JSONResponse({"res": 200}, status_code=200)
+async def get_posts_by_author(auth_id: str) -> list[FoundedPost]:
+    """get all posts, created by current user."""
+    session = Session()
+    repo.attach_session(session)
+    posts = await repo.get_all_posts_by_author(auth_id)
+    if posts:
+        founded = []
+        for post in posts:
+            f_post = FoundedPost(
+                    uid=post.uid,
+                    author_id=post.author_id,
+                    title=post.title,
+                    )
+            founded.append(f_post)
+        session.commit()
+        repo.detach_session()
+        return founded
+    raise HTTPException(status_code=404, detail="BlogPost wasn`t found in DB")

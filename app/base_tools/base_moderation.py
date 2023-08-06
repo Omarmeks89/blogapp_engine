@@ -21,6 +21,7 @@ __all__ = (
 class McodeSize(int, Enum):
     """size constants for <generate mcode> func."""
     MIN_8S: int = 8
+    MIN_16S: int = 16
     MID_32S: int = 32
     MID_64S: int = 64
     MAX_128S: int = 128

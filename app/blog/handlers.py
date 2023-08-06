@@ -1,15 +1,65 @@
 import asyncio
+from datetime import datetime
 
-from .services import mod_service
 from db.base_uow import BaseCmdHandler
 from base_tools.exceptions import DBError, HandlerError, ModerationError
-from .servises import PublicationModerator as Moderator
+# from .servises import PublicationModerator as Moderator
+from .storage.models import BlogPost
+from tasks.email import LOGIN, RECEIVER, send_email
 from .messages import (
         PostRejected,
         PostAccepted,
         StartModeration,
         SetModerationResult,
+        CreateNewPost,
+        NotifyAuthor,
         )
+
+
+mod_service = None
+
+
+class NotifyAuthorsCmdHandler(BaseCmdHandler):
+    """let`s move it to notification service later."""
+
+    async def handle(self, cmd: NotifyAuthor) -> None:
+        """for bus test only."""
+        try:
+            send_email.delay(LOGIN, RECEIVER, cmd.msg)
+        except Exception:
+            pass
+        return None
+
+
+class CreateNewPostHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: CreateNewPost) -> None:
+        new_post = BlogPost(
+                uid=cmd.uid,
+                author_id=cmd.author_id,
+                title=cmd.title,
+                creation_dt=datetime.now(),
+                )
+        async with self._uow as operator:
+            storage = operator.storage
+            try:
+                storage.create_new_post(new_post)
+                await operator.commit()
+            except Exception as err:
+                await operator.rollback()
+                msg = (
+                        f"\nModule {__name__}, class {type(self).__name__} "
+                        f"fetched error from repo: {err}. FAILED\n"
+                        )
+                raise HandlerError(msg)
+        message = f"Your post {cmd.title} was created."
+        self._uow.fetch_event(
+                NotifyAuthor(
+                    uid=cmd.author_id,
+                    msg=message,
+                    )
+                )
+        return None
 
 
 class SetPostModerationResHandler(BaseCmdHandler):
@@ -35,29 +85,29 @@ class BeginPostModerationHandler(BaseCmdHandler):
 
             *mcr -> moderation_ctrl_block.
         """
+        moderator = None
+        blocks = self._task(moderator.build_content_blocks(
+            pub_id=cmd.pub_id,
+            blocks=cmd.blocks,
+            ))
+        mcr = self._task(moderator.make_mcr(pub_id=cmd.pub_id))
+        tasks = (mcr, blocks)
+        try:
+            await asyncio.gather(*tasks)
+        except ModerationError as err:
+            for t in tasks:
+                if not t.cancelled():
+                    t.cancel()
+            raise HandlerError(err)
         async with self._uow as operator:
-            moderator = Moderator()
-            blocks = self._task(moderator.build_content_blocks(
-                pub_id=cmd.pub_id,
-                blocks=cmd.blocks,
-                ))
-            mcr = self._task(moderator.make_mcr(pub_id=cmd.pub_id))
-            tasks = (mcr, blocks)
-            try:
-                await asyncio.gather(*tasks)
-            except ModerationError as err:
-                for t in tasks:
-                    if not t.cancelled():
-                        t.cancel()
-                raise HandlerError(err)
             try:
                 model = await operator.storage.get_pub_by_id(pub_id=cmd.pub_id)
                 upd_model = await moderator.set_on_moderation(model)
                 await operator.storage.update(upd_model)
             except (DBError, ModerationError) as err:
                 raise HandlerError from err
-            for _ in range(len(moderator.events)):
-                self._uow.fetch_event(moderator.dump_event())
+        while moderator.events:
+            self._uow.fetch_event(moderator.dump_event())
         return None
 
 

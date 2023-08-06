@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from pydantic import BaseModel
 from typing import TypeAlias, Union, TypeVar
 
 
@@ -23,14 +24,12 @@ class SimpleAction:
     action_dt: datetime
 
 
-@dataclass
-class Event:
+class Event(BaseModel):
     """root Event class."""
     pass
 
 
-@dataclass
-class Command:
+class Command(BaseModel):
     """root class for commands."""
     pass
 
