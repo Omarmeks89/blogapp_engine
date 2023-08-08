@@ -1,5 +1,4 @@
 from typing import Optional
-from pydantic import BaseModel
 
 from base_tools.base_types import IntervalT
 from base_tools.base_content import PostStatus, BasePublication
@@ -18,13 +17,6 @@ from blog.messages import (
         CommentRejected,
         StartCommentModeration,
         )
-
-
-class FoundedPost(BaseModel):
-    """Test model."""
-    uid: str
-    author_id: str
-    title: str
 
 
 class BlogPost(BasePublication):

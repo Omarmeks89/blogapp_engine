@@ -1,56 +1,31 @@
-from typing import Optional
+import logging
 from typing import TypeVar
 from typing import Type
 
 from sqlalchemy import Table
 from sqlalchemy import update, select
-from sqlalchemy.orm import Session
 
-from db.base_repositories import Repository, RepoState
-from base_tools.exceptions import RepositoryError
+from db.base_repositories import BaseRepository, RepoState
 from base_tools.base_content import PostStatus
 from .models import BlogPost
+from ..content_types import TextContent
 
 
 StatusT = TypeVar("StatusT", PostStatus, str)
 
 
-class PostsRepository(Repository):
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+
+class PostsRepository(BaseRepository):
 
     _model: Type[BlogPost] = BlogPost
     _state: RepoState = RepoState.NOTSET
-
-    @classmethod
-    def _set_repo(cls) -> None:
-        """switch state to ISSET."""
-        cls._state = RepoState.ISSET
-
-    @classmethod
-    def _unset_repo(cls) -> None:
-        """switch state to NOTSET."""
-        cls._state = RepoState.NOTSET
-
-    @classmethod
-    def _attach_model_to_table(cls, tbl: Table, *, test: bool = False) -> None:
-        if cls._state is RepoState.ISSET:
-            return None
-        try:
-            from sqlalchemy.orm import registry
-            from sqlalchemy import inspect
-        except ImportError as err:
-            raise RepositoryError from err
-        mapper = registry()
-        mapper.map_imperatively(cls._model, tbl)
-        if test:
-            from sys import stdout
-            m_info = inspect(BlogPost)
-            stdout.write(
-                    f"\tRepo: {cls.__name__}, module: {__name__}.\n"
-                    f"fields: {m_info.all_orm_descriptors.keys()}.\n"
-                )
-            stdout.flush()
-        cls._set_repo()
-        return None
 
     def __init__(
             self,
@@ -58,26 +33,7 @@ class PostsRepository(Repository):
             *,
             run_test: bool = False,
             ) -> None:
-        self._attach_model_to_table(table, test=run_test)
-        self._session: Optional[Session] = None
-        self._attached = False
-
-    def attach_session(self, session: Session) -> None:
-        if not self._attached:
-            self._session = session
-            self._attached = True
-        return None
-
-    def detach_session(self) -> None:
-        if self._attached:
-            self._session = None
-            self._attached = False
-        return None
-
-    def _check_session_attached(self) -> Optional[None]:
-        if not self._attached:
-            raise RepositoryError("Session wasn`t attached to repository.")
-        return None
+        super().__init__(table, run_test=run_test)
 
     def create_new_post(self, post: BlogPost) -> None:
         """for a test."""
@@ -91,7 +47,7 @@ class PostsRepository(Repository):
             update(BlogPost)
             .where(BlogPost.uid == pub_id)
             .values(state=state)
-            .execution_options(syncronize_session="fetch")
+            .execution_options(syncronize_session=False)
             )
         self._session.execute(upd_state)
         return None
@@ -116,11 +72,11 @@ class PostsRepository(Repository):
                 )
         return self._session.execute(post).scalar()
 
-    async def get_all_posts_by_author(self, author_id: str) -> list[BlogPost]:
+    async def get_all_posts_by_author(self, auth_id: str) -> list[BlogPost]:
         self._check_session_attached()
         posts = (
             select(BlogPost)
-            .where(author_id == author_id)
+            .where(BlogPost.author_id == auth_id)
             )
         # scalars -> we will get python classes.
         posts_items = self._session.execute(posts).scalars().all()
@@ -135,8 +91,55 @@ class PostsRepository(Repository):
         self._check_session_attached()
         posts = (
             select(BlogPost)
-            .where(author_id == author_id, state=state)
+            .where(BlogPost.author_id == author_id, BlogPost.state == state)
             )
         # scalars -> we will get python classes.
         posts_items = self._session.execute(posts).scalars().all()
         return posts_items
+
+
+class ContentRepository(BaseRepository):
+
+    _model: Type[TextContent] = TextContent
+    _state: RepoState = RepoState.NOTSET
+
+    def __init__(
+            self,
+            table: Table,
+            *,
+            run_test: bool = False,
+            ) -> None:
+        super().__init__(table, run_test=run_test)
+
+    async def create_new_content(self, content: TextContent) -> None:
+        self._check_session_attached()
+        self._session.add(content)
+        return None
+
+    async def get_content_by_id(self, content_uid: str) -> TextContent:
+        self._check_session_attached()
+        content = (
+                select(TextContent)
+                .where(TextContent.uid == content_uid)
+                )
+        return self._session.execute(content).scalar()
+
+    async def update_content_body(self, pub_id: str, body: str) -> None:
+        self._check_session_attached()
+        upd_body = (
+            update(TextContent)
+            .where(TextContent.pub_id == pub_id)
+            .values(body=body)
+            .execution_options(syncronize_session=False)
+            )
+        self._session.execute(upd_body)
+        return None
+
+    async def get_all_post_content(self, pub_id: str) -> list[TextContent]:
+        self._check_session_attached()
+        all_content = (
+                select(TextContent)
+                .where(TextContent.pub_id == pub_id)
+                )
+        content_items = self._session.execute(all_content).scalars().all()
+        return content_items

@@ -83,6 +83,7 @@ class CommentRejected(Event):
 
 
 class SaveNewPost(Command):
+    """move to schemas.py"""
     author_id: str
     title: str
 

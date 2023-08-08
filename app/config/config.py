@@ -1,7 +1,9 @@
 from blog.storage.uow_units import ModerationUOW
 from blog.storage.repositories import PostsRepository
+from blog.storage.repositories import ContentRepository
 from db.sessions import Session
 from db.tables import publications
+from db.tables import content
 from base_tools.bus import MsgBus
 
 from blog.messages import (
@@ -26,6 +28,7 @@ async def get_bus() -> MsgBus:
 
 # init Repo
 repo = PostsRepository(publications, run_test=True)
+cont_repo = ContentRepository(content, run_test=True)
 
 # init UOW
 uow = ModerationUOW(repo, Session)
