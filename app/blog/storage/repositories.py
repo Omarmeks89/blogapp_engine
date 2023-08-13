@@ -116,6 +116,13 @@ class ContentRepository(BaseRepository):
         self._session.add(content)
         return None
 
+    async def create_many_content_trans(self, cont: list[TextContent]) -> None:
+        self._check_session_attached()
+        self._session.begin()
+        for content in cont:
+            self._session.add(content)
+        return None
+
     async def get_content_by_id(self, content_uid: str) -> TextContent:
         self._check_session_attached()
         content = (
@@ -124,11 +131,11 @@ class ContentRepository(BaseRepository):
                 )
         return self._session.execute(content).scalar()
 
-    async def update_content_body(self, pub_id: str, body: str) -> None:
+    async def update_content_body(self, uid: str, pub_id: str, body: str) -> None:
         self._check_session_attached()
         upd_body = (
             update(TextContent)
-            .where(TextContent.pub_id == pub_id)
+            .where(TextContent.uid == uid, TextContent.pub_id == pub_id)
             .values(body=body)
             .execution_options(syncronize_session=False)
             )

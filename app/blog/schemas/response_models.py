@@ -1,15 +1,42 @@
 from datetime import datetime
+from typing import Any
+from typing import List
+from typing import TypeVar
 
 from pydantic import BaseModel
 
 
+SchemaT = TypeVar("SchemaT", bound="ContentSchema")
+
+
+class Header(BaseModel):
+    uid: str = ""
+    body: str = ""
+    max_len: int = 256
+
+
+class Body(BaseModel):
+    uid: str = ""
+    body: str = ""
+    max_len: int = 2048
+
+
+def set_schema(schema: SchemaT, content: List[Any]) -> None:
+    for c in content:
+        match c._role:
+            case "header":
+                schema.header = Header(uid=c.uid, body=c.body)
+            case "body":
+                schema.body = Body(uid=c.uid, body=c.body)
+            case _:
+                continue
+
+
 class ContentSchema(BaseModel):
     """use like submodel into PublicationCreated."""
-    header: str = "set header"
-    body: str = "set body"
+    header: Header = Header()
+    body: Body = Body()
     tags: list[str] = []
-    max_header_len: int = 256
-    max_body_len: int = 2048
 
 
 class PublicatedContent(BaseModel):

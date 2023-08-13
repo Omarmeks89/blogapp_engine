@@ -1,7 +1,9 @@
 from datetime import datetime
+from typing import Any
 
 from base_tools.base_content import ContentTypes
 from base_tools.base_types import Command, Event
+from .content_types import TextContent
 
 
 class StartModeration(Command):
@@ -97,3 +99,48 @@ class CreateNewPost(Command):
 class NotifyAuthor(Command):
     uid: str
     msg: str
+
+
+class CreateContentForNewPost(Command):
+    """raised when new empty post was created."""
+    post: Any
+
+
+class AddHeaderForPost(Command):
+    """add Header (TextContent) for new post."""
+    post: Any
+    content: list[TextContent] = []
+
+
+class AddBodyForPost(Command):
+    """add Body (TextContent) for new post."""
+    post: Any
+    content: list[TextContent] = []
+
+
+class SaveAllNewPostContent(Command):
+    """save all content at the end of pipeline."""
+    post: Any
+    content: list[TextContent] = []
+
+
+class UpdateHeader(Command):
+    """update Header for currentpost.
+    uid -> header-content id;
+    pub_id -> current post id;
+    payload -> new text payload."""
+    uid: str
+    pub_id: str
+    payload: str
+
+
+class UpdateBody(Command):
+    uid: str
+    pub_id: str
+    payload: str
+
+
+class AddToCache(Command):
+    """add any item to cache."""
+    skey: str
+    obj: str

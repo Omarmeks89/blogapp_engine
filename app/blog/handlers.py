@@ -3,9 +3,14 @@ from datetime import datetime
 
 from db.base_uow import BaseCmdHandler
 from base_tools.exceptions import DBError, HandlerError, ModerationError
-# from .servises import PublicationModerator as Moderator
 from .storage.models import BlogPost
 from tasks.email import LOGIN, RECEIVER, send_email
+from base_tools.base_moderation import generate_mcode, McodeSize
+from base_tools.base_content import ContentRoles
+from .content_types import TextContent
+from .schemas.response_models import PublicationCreated
+from .schemas.response_models import ContentSchema, set_schema
+from cache import get_cache_engine
 from .messages import (
         PostRejected,
         PostAccepted,
@@ -13,10 +18,17 @@ from .messages import (
         SetModerationResult,
         CreateNewPost,
         NotifyAuthor,
+        AddHeaderForPost,
+        AddBodyForPost,
+        SaveAllNewPostContent,
+        UpdateHeader,
+        UpdateBody,
+        AddToCache,
         )
 
 
 mod_service = None
+ctime = datetime.now
 
 
 class NotifyAuthorsCmdHandler(BaseCmdHandler):
@@ -38,7 +50,7 @@ class CreateNewPostHandler(BaseCmdHandler):
                 uid=cmd.uid,
                 author_id=cmd.author_id,
                 title=cmd.title,
-                creation_dt=datetime.now(),
+                creation_dt=ctime(),
                 )
         async with self._uow as operator:
             storage = operator.storage
@@ -53,12 +65,89 @@ class CreateNewPostHandler(BaseCmdHandler):
                         )
                 raise HandlerError(msg)
         message = f"Your post {cmd.title} was created."
-        self._uow.fetch_event(
-                NotifyAuthor(
+        schema = ContentSchema()
+        post_preview = PublicationCreated(
+                uid=cmd.uid,
+                author_id=cmd.author_id,
+                content=schema,
+                title=cmd.title,
+                )
+        notify = NotifyAuthor(
                     uid=cmd.author_id,
                     msg=message,
                     )
+        add = AddHeaderForPost(
+                    post=post_preview,
+                    )
+        for msg in [notify, add]:
+            self._uow.fetch_event(msg)
+        return None
+
+
+class AddHeaderForPostHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: AddHeaderForPost) -> None:
+        uid = generate_mcode(symblos_cnt=McodeSize.MIN_16S)
+        header = TextContent(uid=uid, pub_id=cmd.post.uid, creation_dt=ctime())
+        header.set_role(ContentRoles.HEADER)
+        post = cmd.post
+        set_schema(post.content, [header, ])
+        next_pipe_cmd = AddBodyForPost(post=post)
+        next_pipe_cmd.content.append(header)
+        self._uow.fetch_event(
+                next_pipe_cmd,
                 )
+        return None
+
+
+class AddBodyForPostHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: AddBodyForPost) -> None:
+        uid = generate_mcode(symblos_cnt=McodeSize.MIN_16S)
+        body = TextContent(uid=uid, pub_id=cmd.post.uid, creation_dt=ctime())
+        body.set_role(ContentRoles.BODY)
+        post = cmd.post
+        set_schema(post.content, [body, ])
+        next_pipe_cmd = SaveAllNewPostContent(post=post)
+        for c in cmd.content:
+            next_pipe_cmd.content.append(c)
+        next_pipe_cmd.content.append(body)
+        self._uow.fetch_event(
+                next_pipe_cmd,
+                )
+        return None
+
+
+class SaveAllContentHandler(BaseCmdHandler):
+    """save all content by default to db."""
+
+    async def handle(self, cmd: SaveAllNewPostContent) -> None:
+        async with self._uow as operator:
+            await operator.storage.create_many_content_trans(
+                    cont=cmd.content,
+                    )
+            try:
+                await operator.commit()
+            except Exception as err:
+                await operator.rollback()
+                raise HandlerError(err)
+        add = AddToCache(skey=cmd.post.uid, obj=cmd.post.model_dump_json())
+        self._uow.fetch_event(add)
+        return None
+
+
+class AddToCacheHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: AddToCache) -> None:
+        try:
+            redis = get_cache_engine()
+            redis.set_temp_obj(
+                    key=cmd.skey,
+                    obj=cmd.obj,
+                    exp_sec=600,
+                    )
+        except Exception as err:
+            raise HandlerError(err)
         return None
 
 
@@ -75,6 +164,46 @@ class SetPostModerationResHandler(BaseCmdHandler):
             for _ in range(len(mod_service.events)):
                 self._uow.fetch_event(mod_service.dump_event())
         return None
+
+
+class UpdateHeaderHandler(BaseCmdHandler):
+    """update header for current post."""
+
+    async def handle(self, cmd: UpdateHeader) -> None:
+        async with self._uow as operator:
+            upd_task = self._task(
+                    operator.storage.update_content_body(
+                        uid=cmd.uid,
+                        pub_id=cmd.pub_id,
+                        body=cmd.payload,
+                        ),
+                    )
+            try:
+                await asyncio.gather(upd_task)
+            except Exception as err:
+                if not upd_task.done():
+                    upd_task.cancel()
+                raise HandlerError(err)
+
+
+class UpdateBodyHandler(BaseCmdHandler):
+    """update main body for current post."""
+
+    async def handle(self, cmd: UpdateBody) -> None:
+        async with self._uow as operator:
+            upd_task = self._task(
+                    operator.storage.update_content_body(
+                        uid=cmd.uid,
+                        pub_id=cmd.pub_id,
+                        body=cmd.payload,
+                        ),
+                    )
+            try:
+                await asyncio.gather(upd_task)
+            except Exception as err:
+                if not upd_task.done():
+                    upd_task.cancel()
+                raise HandlerError(err)
 
 
 class BeginPostModerationHandler(BaseCmdHandler):

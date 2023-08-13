@@ -14,6 +14,9 @@ from typing import MutableMapping as MMap
 from enum import Enum
 from abc import ABC, abstractmethod
 
+from settings import CacheSettings
+from base_tools.actions import JSONFmt
+
 
 AnyItemT = TypeVar("AnyItemT", bound=Any)
 RefT = TypeVar("RefT", bound=weakref.ReferenceType)
@@ -27,6 +30,9 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter("%(name)s %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+
+setup = CacheSettings()
 
 
 class CacheSessionExpired(Exception):
@@ -57,7 +63,15 @@ class AbstractCacheSession(ABC, Generic[CEngineT]):
 
 class AbstractCacheEngine(ABC):
     """interface for abstract cache system."""
-    ...
+
+    @abstractmethod
+    def close() -> None: pass
+
+    @abstractmethod
+    def set_temp_obj(self, key: str, obj: AnyItemT, exp_sec: int) -> None: pass
+
+    @abstractmethod
+    def get_temp_obj(self, key: str) -> AnyItemT: pass
 
 
 class CacheSession(AbstractCacheSession):
@@ -104,7 +118,7 @@ class CacheSession(AbstractCacheSession):
 
     def __repr__(self) -> str:
         return (
-            f"{self._host}:{self._port}/{self._db_no}.decode={self._decode}\n"
+            f"{self._host}:{self._port}/{self._db}.decode={self._decode}\n"
             )
 
     def _weakref_callback(self, link: RefT) -> NoReturn:
@@ -114,11 +128,11 @@ class CacheSession(AbstractCacheSession):
     def _run_clearing(cls) -> None:
         to_remove = []
         for k in cls._map:
-            if weakref.getweakrefcount(cls._map[k]()):
-                continue
-            to_remove.append(cls._map[k])
+            item = cls._map[k]
+            if item() is None:
+                to_remove.append(k)
         for r in to_remove:
-            del r
+            del cls._map[r]
 
     def _del_connection(self) -> Callable[[None], None]:
         """remove connection if no referenses."""
@@ -132,13 +146,15 @@ class CacheSession(AbstractCacheSession):
 
         return _remove_wr
 
-    def connect(self) -> "CacheEngine":
+    def connect(self) -> CEngineT:
         """create connection to Redis."""
         conn: Optional[Any] = None
         key = self.__repr__()
         if self._key_registered(key):
             ref = self._get_connection(key)
-            return CacheEngine(ref(), on_shutdown=self._del_connection())
+            if ref() is not None:
+                return CacheEngine(ref(), on_shutdown=self._del_connection())
+            self._run_clearing()
         conn = redis.Redis(
                 host=self._host,
                 port=self._port,
@@ -159,6 +175,7 @@ class CacheEngine(AbstractCacheEngine):
             *,
             on_shutdown: Callable[[RefT], Callable[[None], None]],
             ) -> None:
+        """conn is (in this case) Redis connection."""
         self._conn = conn
         self._on_shutdown = on_shutdown
 
@@ -169,3 +186,13 @@ class CacheEngine(AbstractCacheEngine):
         except Exception as err:
             msg = f"Raised from {self.close}: {err=}"
             logger.debug(msg)
+
+    def set_temp_obj(self, key: str, obj: JSONFmt, exp_sec: int) -> None:
+        if not hasattr(self, "_conn"):
+            raise CacheSessionExpired("Cache session was closed. Reconnect")
+        self._conn.setex(key, exp_sec, obj)
+
+    def get_temp_obj(self, key: str) -> Optional[JSONFmt]:
+        if not hasattr(self, "_conn"):
+            raise CacheSessionExpired("Cache session was closed. Reconnect")
+        return self._conn.get(key)

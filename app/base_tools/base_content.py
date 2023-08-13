@@ -49,6 +49,12 @@ class ContentTypes(str, Enum):
     IMAGE: str = "image"
 
 
+class ContentRoles(str, Enum):
+    NOTSET: str = "notset"
+    HEADER: str = "header"
+    BODY: str = "body"
+
+
 PubFSM_T: TypeAlias = Union[CommentStatus, PostStatus]
 StateKwarg: str = "state"
 
@@ -92,11 +98,17 @@ class BaseContentPreset(AbsContent):
     creation_dt: datetime
     body: str = field(default_factory=str)
     _kind: ContentTypes = ContentTypes.NONE
+    _role: ContentRoles = ContentRoles.NOTSET
 
     @abstractmethod
     def __post_init__(self) -> None:
         """define exact _kind."""
         pass
+
+    def set_role(self, role: ContentRoles) -> None:
+        """set new role for content."""
+        if self._role is ContentRoles.NOTSET:
+            self._role = role
 
     @property
     def kind(self) -> ContentTypes:
