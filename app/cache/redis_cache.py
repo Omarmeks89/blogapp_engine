@@ -187,12 +187,28 @@ class CacheEngine(AbstractCacheEngine):
             msg = f"Raised from {self.close}: {err=}"
             logger.debug(msg)
 
-    def set_temp_obj(self, key: str, obj: JSONFmt, exp_sec: int) -> None:
+    def _conn_alive(self) -> None:
         if not hasattr(self, "_conn"):
             raise CacheSessionExpired("Cache session was closed. Reconnect")
+
+    def set_temp_obj(self, key: str, obj: JSONFmt, exp_sec: int) -> None:
+        self._conn_alive()
         self._conn.setex(key, exp_sec, obj)
 
     def get_temp_obj(self, key: str) -> Optional[JSONFmt]:
-        if not hasattr(self, "_conn"):
-            raise CacheSessionExpired("Cache session was closed. Reconnect")
+        self._conn_alive()
         return self._conn.get(key)
+
+    def set_mcr_obj(self, hkey: str, internal_key: str, obj: JSONFmt) -> None:
+        """save system-obj -> ModerationControlBlock to Cache."""
+        self._conn_alive()
+        try:
+            self._conn.hset(hkey, mapping={internal_key, obj})
+        except redis.exceptions.ResponseError as err:
+            logger.error(err)
+            raise Exception(err)
+
+    def get_mcr_obj(self, hkey: str, internal_key: str) -> Optional[JSONFmt]:
+        """get serializer mcr-obj."""
+        self._conn_alive()
+        return self._conn.hget(hkey, internal_key)

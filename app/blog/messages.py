@@ -10,6 +10,7 @@ class StartModeration(Command):
     pub_id: str
     author_id: str
     act_dt: datetime
+    # {content_id: content_type} -> {"12534": "TEXT"}
     blocks: dict[str, ContentTypes]
 
 
@@ -144,3 +145,11 @@ class AddToCache(Command):
     """add any item to cache."""
     skey: str
     obj: str
+
+
+class ModerateContent(Command):
+    """send content-block to moderation.
+    :uid: content id in DB;
+    :mcode: unique command code (str)."""
+    uid: str
+    mcode: str

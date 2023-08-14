@@ -12,6 +12,7 @@ from base_tools.bus import MsgBus
 from .schemas.response_models import PublicationCreated, PublicatedPost
 from .schemas.response_models import ContentSchema, set_schema
 from .schemas.request_models import UpdateHeaderRequest, UpdateBodyRequest
+from .schemas.request_models import StartModerationRequest
 from config.config import get_bus, mod_uow, cont_uow
 from cache import CacheEngine, get_cache_engine
 
@@ -128,7 +129,10 @@ async def add_tags() -> None:
 
 
 @author.patch("/edit/{pub_id}/pub")
-async def pub() -> None:
+async def pub(
+        cmd: StartModerationRequest,
+        bus: MsgBus = Depends(get_bus),
+        ) -> None:
     """send post to moderation."""
     ...
 

@@ -81,7 +81,7 @@ class PublicationModerator:
         for block in self._blocks:
             # mcr set uid as block.mcode
             mcr.register_block(block)
-        cmd = AddToCache(uid=mcr.pub_id, payload=mcr.to_json())
+        cmd = AddToCache(skey=mcr.pub_id, obj=mcr.to_json())
         self._events.append(cmd)
         return mcr
 
@@ -100,7 +100,7 @@ class PublicationModerator:
                             pub_id=pub_id,
                         )
                     self._blocks.append(block)
-                    cmd = ModerateContent(uid=b_uid)
+                    cmd = ModerateContent(uid=b_uid, mcode=block.mcode)
                     self._events.append(cmd)
                 case _:
                     pass

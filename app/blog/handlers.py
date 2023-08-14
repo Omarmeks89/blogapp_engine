@@ -90,9 +90,8 @@ class AddHeaderForPostHandler(BaseCmdHandler):
         uid = generate_mcode(symblos_cnt=McodeSize.MIN_16S)
         header = TextContent(uid=uid, pub_id=cmd.post.uid, creation_dt=ctime())
         header.set_role(ContentRoles.HEADER)
-        post = cmd.post
-        set_schema(post.content, [header, ])
-        next_pipe_cmd = AddBodyForPost(post=post)
+        set_schema(cmd.post.content, [header, ])
+        next_pipe_cmd = AddBodyForPost(post=cmd.post)
         next_pipe_cmd.content.append(header)
         self._uow.fetch_event(
                 next_pipe_cmd,
@@ -106,9 +105,8 @@ class AddBodyForPostHandler(BaseCmdHandler):
         uid = generate_mcode(symblos_cnt=McodeSize.MIN_16S)
         body = TextContent(uid=uid, pub_id=cmd.post.uid, creation_dt=ctime())
         body.set_role(ContentRoles.BODY)
-        post = cmd.post
-        set_schema(post.content, [body, ])
-        next_pipe_cmd = SaveAllNewPostContent(post=post)
+        set_schema(cmd.post.content, [body, ])
+        next_pipe_cmd = SaveAllNewPostContent(post=cmd.post)
         for c in cmd.content:
             next_pipe_cmd.content.append(c)
         next_pipe_cmd.content.append(body)
