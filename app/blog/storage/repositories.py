@@ -41,12 +41,12 @@ class PostsRepository(BaseRepository):
         self._session.add(post)
         return None
 
-    async def update_state(self, pub_id: str, state: StatusT) -> None:
+    async def update_state(self, model: BlogPost) -> None:
         self._check_session_attached()
         upd_state = (
             update(BlogPost)
-            .where(BlogPost.uid == pub_id)
-            .values(state=state)
+            .where(BlogPost.uid == model.uid)
+            .values(state=model.state)
             .execution_options(syncronize_session=False)
             )
         self._session.execute(upd_state)

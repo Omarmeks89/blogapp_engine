@@ -52,6 +52,8 @@ class ModerationControlRecord(Serializable):
     """MCR implementation. class that controlled
     moderation process."""
     pub_id: str
+    act_dt: int
+    exp_after: int
     blocks: dict[str, Union[str, ModerationRes]] = field(default_factory=dict)
     reports: list[str] = field(default_factory=list)
 
@@ -60,11 +62,15 @@ class ModerationControlRecord(Serializable):
 
     def register_block(self, block: _ContentBlock) -> None:
         """register content block."""
-        if block.uid not in self.blocks:
+        if block.mcode not in self.blocks:
             self.blocks[block.mcode] = self.blocks.get(
                         block.mcode,
                         block.state,
                     )
+
+    def mcode_registered(self, mcode: str) -> bool:
+        """check external mcode on registration."""
+        return mcode in self.blocks
 
     def set_moderation_result(
             self,

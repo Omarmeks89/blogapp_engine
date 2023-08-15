@@ -75,6 +75,10 @@ class BasePublication(AbsPublication, Model):
         except ImportError as err:
             raise PublicationError(f"Can`t import collections module: {err}")
 
+    @property
+    def state(self) -> PubFSM_T:
+        return self._state
+
     def events(self) -> Generator:
         """return events by one."""
         while self._events:

@@ -10,6 +10,7 @@ from base_tools.base_content import ContentRoles
 from .content_types import TextContent
 from .schemas.response_models import PublicationCreated
 from .schemas.response_models import ContentSchema, set_schema
+from .services import PublicationModerator
 from cache import get_cache_engine
 from .messages import (
         PostRejected,
@@ -64,7 +65,6 @@ class CreateNewPostHandler(BaseCmdHandler):
                         f"fetched error from repo: {err}. FAILED\n"
                         )
                 raise HandlerError(msg)
-        message = f"Your post {cmd.title} was created."
         schema = ContentSchema()
         post_preview = PublicationCreated(
                 uid=cmd.uid,
@@ -72,15 +72,10 @@ class CreateNewPostHandler(BaseCmdHandler):
                 content=schema,
                 title=cmd.title,
                 )
-        notify = NotifyAuthor(
-                    uid=cmd.author_id,
-                    msg=message,
-                    )
-        add = AddHeaderForPost(
+        self._uow.fetch_event(AddHeaderForPost(
                     post=post_preview,
+                    ),
                     )
-        for msg in [notify, add]:
-            self._uow.fetch_event(msg)
         return None
 
 
@@ -153,14 +148,33 @@ class SetPostModerationResHandler(BaseCmdHandler):
 
     async def handle(self, cmd: SetModerationResult) -> None:
         """Set block moderation result"""
-        async with self._uow as operator:
-            mcr = await operator.cache.get(cmd.mcr_id)
-            try:
-                await mod_service.set_moderation_result(cmd, mcr)
-            except ModerationError as err:
-                raise HandlerError from err
-            for _ in range(len(mod_service.events)):
-                self._uow.fetch_event(mod_service.dump_event())
+        moderator = PublicationModerator()
+        cache = get_cache_engine()
+        mcr = cache.get_mcr_obj(hkey=cmd.mcr_id, internal_key="mcr")
+        if mcr is None:
+            self._uow.fetch_event(
+                    f"mcr {cmd.mcr_id} expired.",
+                    )
+            return None
+        try:
+            await moderator.set_moderation_result(
+                    mcode=cmd.mcode,
+                    state=cmd.state,
+                    report=cmd.report,
+                    mcr=mcr,
+                    )
+            cache.set_mcr_obj(
+                    hkey=cmd.mcr_id,
+                    internal_key="mcr",
+                    obj=mcr.to_json(),
+                    )
+        except ModerationError as err:
+            raise HandlerError from err
+        except Exception:
+            # CacheError here
+            pass
+        for _ in range(len(moderator.events)):
+            self._uow.fetch_event(mod_service.dump_event())
         return None
 
 
@@ -179,8 +193,6 @@ class UpdateHeaderHandler(BaseCmdHandler):
             try:
                 await asyncio.gather(upd_task)
             except Exception as err:
-                if not upd_task.done():
-                    upd_task.cancel()
                 raise HandlerError(err)
 
 
@@ -199,8 +211,6 @@ class UpdateBodyHandler(BaseCmdHandler):
             try:
                 await asyncio.gather(upd_task)
             except Exception as err:
-                if not upd_task.done():
-                    upd_task.cancel()
                 raise HandlerError(err)
 
 
@@ -209,31 +219,29 @@ class BeginPostModerationHandler(BaseCmdHandler):
 
     async def handle(self, cmd: StartModeration) -> None:
         """We`re waiting and react on StartModeration command.
-
             *mcr -> moderation_ctrl_block.
         """
-        moderator = None
+        moderator = PublicationModerator()
         blocks = self._task(moderator.build_content_blocks(
             pub_id=cmd.pub_id,
             blocks=cmd.blocks,
             ))
-        mcr = self._task(moderator.make_mcr(pub_id=cmd.pub_id))
+        mcr = self._task(moderator.make_mcr(cmd.pub_id))
         tasks = (mcr, blocks)
         try:
             await asyncio.gather(*tasks)
         except ModerationError as err:
-            for t in tasks:
-                if not t.cancelled():
-                    t.cancel()
             raise HandlerError(err)
         async with self._uow as operator:
             try:
-                model = await operator.storage.get_pub_by_id(pub_id=cmd.pub_id)
+                model = await operator.storage.get_post_by_id(cmd.pub_id)
                 upd_model = await moderator.set_on_moderation(model)
-                await operator.storage.update(upd_model)
+                await operator.storage.update_state(upd_model)
+                await operator.commit()
             except (DBError, ModerationError) as err:
+                await operator.rollback()
                 raise HandlerError from err
-        while moderator.events:
+        for _ in range(len(moderator.events)):
             self._uow.fetch_event(moderator.dump_event())
         return None
 
@@ -242,22 +250,18 @@ class FixPostAcceptedHandler(BaseCmdHandler):
     """react if PostAccepted event was produced."""
 
     async def handle(self, event: PostAccepted) -> None:
+        moderator = PublicationModerator()
         async with self._uow as operator:
-            upd_state_task = self._task(
-                operator.storage.set_as_accepted(event.pub_id),
-                )
-            accept = self._task(mod_service.accept_publication(event.pub_id))
-            tasks = (upd_state_task, accept)
             try:
-                await asyncio.gather(*tasks)
+                model = await operator.storage.get_post_by_id(event.pub_id)
+                upd_model = await moderator.accept_publication(model)
+                await operator.storage.update_state(upd_model)
+                await operator.commit()
             except DBError as err:
-                await operator.storage.rollback_last()
-                for t in tasks:
-                    if not t.done():
-                        t.cancel()
+                await operator.rollback()
                 raise HandlerError from err
-            for _ in range(len(mod_service.events)):
-                self._uow.fetch_event(mod_service.dump_event())
+        for _ in range(len(moderator.events)):
+            self._uow.fetch_event(moderator.dump_event())
         return None
 
 
@@ -265,17 +269,16 @@ class FixPostRejectedHandler(BaseCmdHandler):
     """react if PostRejected event was produced."""
 
     async def handle(self, event: PostRejected) -> None:
+        moderator = PublicationModerator()
         async with self._uow as operator:
-            upd_state_task = self._task(
-                operator.storage.set_as_rejected(event.pub_id),
-                )
-            reject = self._task(mod_service.reject_publication(event.pub_id))
-            tasks = (upd_state_task, reject)
             try:
-                await asyncio.gather(*tasks)
+                model = await operator.storage.get_post_by_id(event.pub_id)
+                upd_model = await moderator.reject_publication(model)
+                await operator.storage.update_state(upd_model)
+                await operator.commit()
             except DBError as err:
-                await operator.storage.rollback_last()
+                await operator.rollback()
                 raise HandlerError from err
-            for _ in range(len(mod_service.events)):
-                self._uow.fetch_event(mod_service.dump_event())
+        for _ in range(len(moderator.events)):
+            self._uow.fetch_event(moderator.dump_event())
         return None

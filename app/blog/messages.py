@@ -153,3 +153,4 @@ class ModerateContent(Command):
     :mcode: unique command code (str)."""
     uid: str
     mcode: str
+    pub_id: str

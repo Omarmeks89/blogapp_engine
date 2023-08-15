@@ -219,3 +219,8 @@ async def comment_current_comment() -> None:
 @main.get("/{pub_id}/repost")
 async def repost() -> None:
     ...
+
+
+@main.get("/moderation/posts/{post_id}/{c_uid}")
+async def get_content_for_moderation(post_id: str, c_uid: str) -> None:
+    ...

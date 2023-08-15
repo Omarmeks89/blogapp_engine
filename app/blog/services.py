@@ -100,7 +100,11 @@ class PublicationModerator:
                             pub_id=pub_id,
                         )
                     self._blocks.append(block)
-                    cmd = ModerateContent(uid=b_uid, mcode=block.mcode)
+                    cmd = ModerateContent(
+                            uid=b_uid,
+                            mcode=block.mcode,
+                            pub_id=pub_id,
+                            )
                     self._events.append(cmd)
                 case _:
                     pass

@@ -22,6 +22,5 @@ class UpdateBodyRequest(BaseModel):
 class StartModerationRequest(BaseModel):
     """start post moderation process."""
     pub_id: str
-    author_id: str
     start_dt: datetime
     blocks: dict[str, ContentTypes]

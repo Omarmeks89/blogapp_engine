@@ -13,8 +13,9 @@ celery_app.conf.update(
         result_serializer="json",
         timezone="Europe/Moscow",
         enable_utc=True,
-        include=["tasks.email", ],
+        include=["tasks.email", "tasks.moderation", ],
         )
 celery_app.conf.task_routes = {
             "tasks.email.*": {"queue": "notification"},
+            "tasks.moderation.*": {"queue": "moderation"},
         }
