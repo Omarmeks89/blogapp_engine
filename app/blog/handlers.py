@@ -184,7 +184,7 @@ class UpdateHeaderHandler(BaseCmdHandler):
     async def handle(self, cmd: UpdateHeader) -> None:
         async with self._uow as operator:
             upd_task = self._task(
-                    operator.storage.update_content_body(
+                    operator.storage.update_body(
                         uid=cmd.uid,
                         pub_id=cmd.pub_id,
                         body=cmd.payload,

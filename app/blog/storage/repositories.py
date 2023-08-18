@@ -14,12 +14,7 @@ from ..content_types import TextContent
 StatusT = TypeVar("StatusT", PostStatus, str)
 
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+logger = logging.getLogger("BLOG_LOG")
 
 
 class PostsRepository(BaseRepository):
@@ -36,7 +31,6 @@ class PostsRepository(BaseRepository):
         super().__init__(table, run_test=run_test)
 
     def create_new_post(self, post: BlogPost) -> None:
-        """for a test."""
         self._check_session_attached()
         self._session.add(post)
         return None
@@ -58,13 +52,12 @@ class PostsRepository(BaseRepository):
             update(BlogPost)
             .where(BlogPost.uid == pub_id)
             .values(title=title)
-            .execution_options(syncronize_session="fetch")
+            .execution_options(syncronize_session=False)
             )
         self._session.execute(upd_title)
         return None
 
     def get_post_by_uid(self, pub_id: str) -> BlogPost:
-        """for a test."""
         self._check_session_attached()
         post = (
                 select(BlogPost)
@@ -131,7 +124,7 @@ class ContentRepository(BaseRepository):
                 )
         return self._session.execute(content).scalar()
 
-    async def update_content_body(self, uid: str, pub_id: str, body: str) -> None:
+    async def update_body(self, uid: str, pub_id: str, body: str) -> None:
         self._check_session_attached()
         upd_body = (
             update(TextContent)

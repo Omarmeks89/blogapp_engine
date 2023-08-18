@@ -7,11 +7,10 @@ from typing import Optional
 from enum import Enum
 
 from base_tools.exceptions import RepositoryError
-from sqlalchemy import MetaData, Table
+from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
 
-DBMetaT = TypeVar("DBMetaT", bound=MetaData, contravariant=True)
 DBTableT = TypeVar("DBTableT", bound=Table, contravariant=True)
 SessionT = TypeVar("SessionT", bound=Session, contravariant=True)
 AnyModelT = TypeVar("AnyModelT", bound=Any)
@@ -22,13 +21,13 @@ class RepoState(int, Enum):
     ISSET: int = 1
 
 
-class Repository(ABC, Generic[DBMetaT, DBTableT]):
+class Repository(ABC, Generic[DBTableT]):
     """Repository interface / type."""
     _model: Type[AnyModelT]
     _state: RepoState
 
     @abstractmethod
-    def __init__(self, meta: DBMetaT, table: DBTableT) -> None: pass
+    def __init__(self, table: DBTableT) -> None: pass
 
     @abstractmethod
     def attach_session(self, session: SessionT) -> None: pass
