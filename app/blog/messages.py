@@ -53,6 +53,16 @@ class ModerationStarted(Event):
     pub_title: str
 
 
+class ModerationFailed(Event):
+    """if any of blocks rejected or mcr expired."""
+    pub_id: str
+    reasons: list[str]
+
+
+class ModerationDoneSuccess(Event):
+    pub_id: str
+
+
 class CommentDeleted(Event):
     """
     pub_id: publication id,

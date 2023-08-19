@@ -15,6 +15,7 @@ from .schemas.request_models import UpdateHeaderRequest, UpdateBodyRequest
 from .schemas.request_models import StartModerationRequest
 from config.config import get_bus, mod_uow, cont_uow
 from cache import CacheEngine, get_cache_engine
+from authors.auth.auth import get_uid_from_token
 
 
 __all__ = [
@@ -27,17 +28,14 @@ main = APIRouter(prefix="/main")  # rename to main
 author = APIRouter(prefix="/main/{user_id}")  # for registered users
 
 
-#  -----------------> "/{user_id}"
-
-
 @author.post("/new")
 async def create_new_post(
-        user_id: str,
         title: str,
+        user_id: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),
         ) -> RedirectResponse:
-    """TODO -> add /{author_id}/..."""
     pub_id = generate_mcode(symblos_cnt=McodeSize.MIN_16S)
+    # check user permissions here
     int_cmd = CreateNewPost(
             uid=pub_id,
             author_id=user_id,
@@ -83,6 +81,7 @@ async def get_post_by_id(
 @author.patch("/edit/{pub_id}/update_header")
 async def update_header(
         request: UpdateHeaderRequest,
+        user_id: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),
         ) -> Response:
     """update current post header."""
@@ -104,6 +103,7 @@ async def update_header(
 @author.patch("/edit/{pub_id}/update_text")
 async def update_body(
         request: UpdateBodyRequest,
+        user_id: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),
         ) -> Response:
     """update current post text body."""
@@ -122,15 +122,10 @@ async def update_body(
         raise HTTPException(status_code=404, detail=f"{err=}")
 
 
-@author.post("/edit/{pub_id}/add_tags")
-async def add_tags() -> None:
-    """add tags to post."""
-    ...
-
-
 @author.patch("/edit/{pub_id}/pub")
 async def pub(
         cmd: StartModerationRequest,
+        user_id: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),
         ) -> None:
     """send post to moderation."""
@@ -144,19 +139,25 @@ async def activate_moderated_post() -> None:
 
 
 @author.get("/rejected")
-async def show_rejected_main() -> None:
+async def show_my_rejected_posts(
+        user_id: str = Depends(get_uid_from_token),
+        ) -> None:
     """show all rejected main."""
     ...
 
 
 @author.get("/rejected/{pub_id}")
-async def get_rejected_post() -> None:
+async def get_rejected_post(
+        user_id: str = Depends(get_uid_from_token),
+        ) -> None:
     """show current rejected post."""
     ...
 
 
 @author.post("/rejected/{pub_id}/correct")
-async def correct_rejected_post() -> RedirectResponse:
+async def correct_rejected_post(
+        user_id: str = Depends(get_uid_from_token),
+        ) -> RedirectResponse:
     """rollback post to template for correction."""
     ...
     pub_id = None
@@ -164,14 +165,11 @@ async def correct_rejected_post() -> RedirectResponse:
     return RedirectResponse(f"/main/{user_id}/edit/{pub_id}", status_code=303)
 
 
-#  ----------------------------------> "/main"
-
-
 @main.get("/")
 async def show_rated_main_previews() -> None:
     """show all rated main previews.
     From most common watched."""
-    ...
+    return Response(status_code=201)
 
 
 @main.get("/{auth_id}/all")
@@ -188,7 +186,12 @@ async def get_selected_post(pub_id: str) -> PublicatedPost:
 
 
 @main.patch("/{pub_id}/like")
-async def like(pub_id: str, bus: MsgBus = Depends(get_bus)) -> None:
+async def like(
+        pub_id: str,
+        user_id: str = Depends(get_uid_from_token),
+        bus: MsgBus = Depends(get_bus),
+        ) -> None:
+
     """like current post (from main or inside a post)."""
     # cmd = LikeThisPost(uid=pub_id, produser=user_id)
     # like_task = asyncio.create_task(bus.handle(cmd))
@@ -199,7 +202,11 @@ async def like(pub_id: str, bus: MsgBus = Depends(get_bus)) -> None:
 
 
 @main.patch("/{pub_id}/dislike")
-async def dislike() -> None:
+async def dislike(
+        pub_id: str,
+        user_id: str = Depends(get_uid_from_token),
+        bus: MsgBus = Depends(get_bus),
+        ) -> None:
     """the same as like."""
     ...
 
@@ -216,11 +223,7 @@ async def comment_current_comment() -> None:
     ...
 
 
-@main.get("/{pub_id}/repost")
-async def repost() -> None:
-    ...
-
-
 @main.get("/moderation/posts/{post_id}/{c_uid}")
 async def get_content_for_moderation(post_id: str, c_uid: str) -> None:
+    """send content to mod servise via ext servise."""
     ...
