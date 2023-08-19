@@ -24,7 +24,8 @@ class PasslibCrypt(AbcCryptographer):
             # remember how to Path()...
             self._ctx = CryptContext.from_path(build_from_path)
         else:
-            _schm = schemes or []
+            _schm = schemes or [CryptSchema.SHA256_CRYPT.value, ]
+            logger.debug(_schm)
             _dpr = deprecated or []
             self._ctx = CryptContext(
                     schemes=_schm,

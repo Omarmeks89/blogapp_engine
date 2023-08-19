@@ -5,11 +5,13 @@ from settings import TestSettings
 from db.sessions import bootstrap_db, engine
 from db.tables import metadata
 from blog.api import main, author
+from authors.api import users
 
 
 app = FastAPI()
 app.include_router(main)
 app.include_router(author)
+app.include_router(users)
 app_set = TestSettings()
 
 
