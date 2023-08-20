@@ -24,3 +24,11 @@ class StartModerationRequest(BaseModel):
     pub_id: str
     start_dt: datetime
     blocks: dict[str, ContentTypes]
+
+
+class SetContentCheckResult(BaseModel):
+    """set moderation result for current content block."""
+    mcr_id: str
+    mcode: str
+    state: str
+    report: str

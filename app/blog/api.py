@@ -1,5 +1,6 @@
 import asyncio
-import json
+import logging
+from datetime import datetime
 from typing import Optional
 from typing import Union
 from fastapi import APIRouter, HTTPException
@@ -7,12 +8,14 @@ from fastapi import Depends, Response
 from fastapi.responses import RedirectResponse
 
 from .messages import CreateNewPost, UpdateHeader, UpdateBody
+from .messages import StartModeration, SetModerationResult
 from base_tools.base_moderation import generate_mcode, McodeSize
+from base_tools.base_moderation import ModerationControlRecord as MCR
 from base_tools.bus import MsgBus
 from .schemas.response_models import PublicationCreated, PublicatedPost
 from .schemas.response_models import ContentSchema, set_schema
 from .schemas.request_models import UpdateHeaderRequest, UpdateBodyRequest
-from .schemas.request_models import StartModerationRequest
+from .schemas.request_models import StartModerationRequest, SetContentCheckResult
 from config.config import get_bus, mod_uow, cont_uow
 from cache import CacheEngine, get_cache_engine
 from authors.auth.auth import get_uid_from_token
@@ -26,6 +29,13 @@ __all__ = [
 
 main = APIRouter(prefix="/main")  # rename to main
 author = APIRouter(prefix="/main/{user_id}")  # for registered users
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+str_handler = logging.StreamHandler()
+formatter = logging.Formatter("%(name)s %(levelname)s %(asctime)s %(message)s")
+str_handler.setFormatter(formatter)
+logger.addHandler(str_handler)
 
 
 @author.post("/new")
@@ -42,25 +52,26 @@ async def create_new_post(
             title=title,
             )
     bus_task = asyncio.create_task(bus.handle(int_cmd))
-    await asyncio.gather(bus_task)
-    return RedirectResponse(f"/main/{user_id}/edit/{pub_id}", status_code=303)
+    try:
+        await asyncio.gather(bus_task)
+        return RedirectResponse(
+                f"/main/{user_id}/edit/{pub_id}",
+                status_code=303,
+                )
+    except Exception as err:
+        logger.error(err)
+        raise HTTPException(status_code=404, detail="Not found.")
 
 
 @author.get("/edit/{pub_id}", response_model=None)
 async def get_post_by_id(
         pub_id: str,
-        user_id: str,
-        redis: CacheEngine = Depends(get_cache_engine),
+        user_id: str = Depends(get_uid_from_token),
         ) -> Union[PublicationCreated, Response]:
     """get author`s post by post_id."""
-    post = redis.get_temp_obj(pub_id)
-    if post:
-        redis.set_temp_obj(pub_id, post, 600)
-        response = json.loads(post)
-        return response
     d_schema: Optional[ContentSchema] = None
     async with mod_uow as uow:
-        post = uow.storage.get_post_by_uid(pub_id)
+        post = await uow.storage.get_post_by_uid(pub_id)
         if post is None:
             raise HTTPException(status_code=404, detail="Not found...")
         async with cont_uow as cont_provider:
@@ -95,9 +106,8 @@ async def update_header(
         await asyncio.gather(upd_task)
         return Response(status_code=200)
     except Exception as err:
-        if not upd_task.done():
-            upd_task.cancel()
-        raise HTTPException(status_code=404, detail=f"{err=}")
+        logger.error(err)
+        raise HTTPException(status_code=404, detail="Not found.")
 
 
 @author.patch("/edit/{pub_id}/update_text")
@@ -108,7 +118,7 @@ async def update_body(
         ) -> Response:
     """update current post text body."""
     upd_body = UpdateBody(
-            uid=request.header_id,
+            uid=request.body_id,
             pub_id=request.pub_id,
             payload=request.payload,
             )
@@ -117,9 +127,8 @@ async def update_body(
         await asyncio.gather(upd_task)
         return Response(status_code=200)
     except Exception as err:
-        if not upd_task.done():
-            upd_task.cancel()
-        raise HTTPException(status_code=404, detail=f"{err=}")
+        logger.error(err)
+        raise HTTPException(status_code=404, detail="Not found.")
 
 
 @author.patch("/edit/{pub_id}/pub")
@@ -127,9 +136,22 @@ async def pub(
         cmd: StartModerationRequest,
         user_id: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),
-        ) -> None:
+        ) -> Response:
     """send post to moderation."""
-    ...
+    # check user permissions
+    start_moderation = StartModeration(
+            pub_id=cmd.pub_id,
+            author_id=user_id,
+            act_dt=datetime.utcnow(),
+            blocks=cmd.blocks,
+            )
+    start_task = asyncio.create_task(bus.handle(start_moderation))
+    try:
+        await asyncio.gather(start_task)
+        return Response(status_code=200)
+    except Exception as err:
+        logger.error(err)
+        raise HTTPException(status_code=404, detail="Ups.. sth was wrong...")
 
 
 @author.patch("/moderated/{pub_id}/activate")
@@ -223,7 +245,47 @@ async def comment_current_comment() -> None:
     ...
 
 
-@main.get("/moderation/posts/{post_id}/{c_uid}")
-async def get_content_for_moderation(post_id: str, c_uid: str) -> None:
+@main.get("/moderation/posts")
+async def get_content_for_moderation(
+        pub_id: str,
+        rkey: str,
+        c_uid: str,
+        redis: CacheEngine = Depends(get_cache_engine),
+        ) -> dict[str, str]:
     """send content to mod servise via ext servise."""
-    ...
+    mcr = redis.get_temp_obj(pub_id)
+    logger.debug(mcr)
+    if mcr is None:
+        raise HTTPException(status_code=404, detail="MCR not found.")
+    mcr = MCR.from_json(mcr)
+    if not mcr.mcode_registered(rkey):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    async with cont_uow as content_provider:
+        storage = content_provider.storage
+        try:
+            content = await storage.get_content_by_id(c_uid)
+            return {rkey: content.body}
+        except Exception as err:
+            logger.error(err)
+            raise HTTPException(status_code=404, detail="Not found.")
+        return None
+
+
+@main.post("/moderation/posts/set")
+async def set_moderation_result(
+        request: SetContentCheckResult,
+        bus: MsgBus = Depends(get_bus),
+        ) -> Response:
+    result = SetModerationResult(
+            mcr_id=request.mcr_id,
+            block_id=request.mcode,
+            state=request.state,
+            report=request.report,
+            )
+    task = asyncio.create_task(bus.handle(result))
+    try:
+        await asyncio.gather(task)
+        return Response(status_code=200)
+    except Exception as err:
+        logger.error(err)
+        raise HTTPException(status_code=404, detail="Ups! Sth went wrong...")

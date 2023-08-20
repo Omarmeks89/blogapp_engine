@@ -5,6 +5,9 @@ class TestSettings(BaseSettings):
     app_run_path: str = ""
     app_api_v: str = ""
     reloading: bool = True
+    encoding: str = "utf-8"
+    secret: str = ""
+    crypt_alg: str = ""
     model_config = SettingsConfigDict(
             env_file=".env",
             env_file_encoding="utf-8",
@@ -44,18 +47,6 @@ class TestDBSettings(BaseSettings):
                 self.TEST_PORT,
                 self.TEST_DB_NAME,
                 )
-
-
-class SMTPSettings(BaseSettings):
-    SMTP_PASSWD: str = "oaexmxckmxvxrlyb"
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 465
-    SMTP_LOGIN: str = "r5railmodels@gmail.com"
-    model_config = SettingsConfigDict(
-            env_file=".env",
-            env_file_encoding="utf-8",
-            extra="ignore",  # compability with 1.x
-            )
 
 
 class CacheSettings(BaseSettings):

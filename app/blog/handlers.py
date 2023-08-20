@@ -1,10 +1,12 @@
 import asyncio
+import logging
 from datetime import datetime
 
 from db.base_uow import BaseCmdHandler
-from base_tools.exceptions import DBError, HandlerError, ModerationError
+from base_tools.exceptions import HandlerError, ModerationError
 from .storage.models import BlogPost
 from tasks.email import LOGIN, RECEIVER, send_email
+from tasks.moderation import fetch_content
 from base_tools.base_moderation import generate_mcode, McodeSize
 from base_tools.base_content import ContentRoles
 from .content_types import TextContent
@@ -25,11 +27,20 @@ from .messages import (
         UpdateHeader,
         UpdateBody,
         AddToCache,
+        ModerateContent,
+        ModerationStarted,
         )
 
 
 mod_service = None
 ctime = datetime.now
+
+h_logger = logging.getLogger(__name__)
+h_logger.setLevel(logging.DEBUG)
+str_handler = logging.StreamHandler()
+formatter = logging.Formatter("%(name)s %(levelname)s %(asctime)s %(message)s")
+str_handler.setFormatter(formatter)
+h_logger.addHandler(str_handler)
 
 
 class NotifyAuthorsCmdHandler(BaseCmdHandler):
@@ -39,9 +50,17 @@ class NotifyAuthorsCmdHandler(BaseCmdHandler):
         """for bus test only."""
         try:
             send_email.delay(LOGIN, RECEIVER, cmd.msg)
-        except Exception:
+        except Exception as err:
+            h_logger.error(err)
             pass
         return None
+
+
+class StartModerationNotifyHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: ModerationStarted) -> None:
+        """NotImplemented."""
+        pass
 
 
 class CreateNewPostHandler(BaseCmdHandler):
@@ -60,6 +79,7 @@ class CreateNewPostHandler(BaseCmdHandler):
                 await operator.commit()
             except Exception as err:
                 await operator.rollback()
+                h_logger.error(err)
                 msg = (
                         f"\nModule {__name__}, class {type(self).__name__} "
                         f"fetched error from repo: {err}. FAILED\n"
@@ -122,10 +142,9 @@ class SaveAllContentHandler(BaseCmdHandler):
             try:
                 await operator.commit()
             except Exception as err:
+                h_logger.error(err)
                 await operator.rollback()
                 raise HandlerError(err)
-        add = AddToCache(skey=cmd.post.uid, obj=cmd.post.model_dump_json())
-        self._uow.fetch_event(add)
         return None
 
 
@@ -140,6 +159,7 @@ class AddToCacheHandler(BaseCmdHandler):
                     exp_sec=600,
                     )
         except Exception as err:
+            h_logger.error(err)
             raise HandlerError(err)
         return None
 
@@ -150,7 +170,7 @@ class SetPostModerationResHandler(BaseCmdHandler):
         """Set block moderation result"""
         moderator = PublicationModerator()
         cache = get_cache_engine()
-        mcr = cache.get_mcr_obj(hkey=cmd.mcr_id, internal_key="mcr")
+        mcr = cache.get_temp_obj(cmd.mcr_id)
         if mcr is None:
             self._uow.fetch_event(
                     f"mcr {cmd.mcr_id} expired.",
@@ -163,18 +183,17 @@ class SetPostModerationResHandler(BaseCmdHandler):
                     report=cmd.report,
                     mcr=mcr,
                     )
-            cache.set_mcr_obj(
-                    hkey=cmd.mcr_id,
-                    internal_key="mcr",
-                    obj=mcr.to_json(),
+            self._uow.fetch_event(
+                    AddToCache(skey=cmd.mcr_id, obj=mcr.to_json()),
                     )
         except ModerationError as err:
+            h_logger.error(err)
             raise HandlerError from err
-        except Exception:
-            # CacheError here
-            pass
-        for _ in range(len(moderator.events)):
-            self._uow.fetch_event(mod_service.dump_event())
+        except Exception as exp:
+            h_logger.error(exp)
+            raise HandlerError from exp
+        for _ in range(moderator.events):
+            self._uow.fetch_event(moderator.dump_event())
         return None
 
 
@@ -193,6 +212,7 @@ class UpdateHeaderHandler(BaseCmdHandler):
             try:
                 await asyncio.gather(upd_task)
             except Exception as err:
+                h_logger.error(err)
                 raise HandlerError(err)
 
 
@@ -202,7 +222,7 @@ class UpdateBodyHandler(BaseCmdHandler):
     async def handle(self, cmd: UpdateBody) -> None:
         async with self._uow as operator:
             upd_task = self._task(
-                    operator.storage.update_content_body(
+                    operator.storage.update_body(
                         uid=cmd.uid,
                         pub_id=cmd.pub_id,
                         body=cmd.payload,
@@ -211,6 +231,7 @@ class UpdateBodyHandler(BaseCmdHandler):
             try:
                 await asyncio.gather(upd_task)
             except Exception as err:
+                h_logger.error(err)
                 raise HandlerError(err)
 
 
@@ -230,20 +251,39 @@ class BeginPostModerationHandler(BaseCmdHandler):
         tasks = (mcr, blocks)
         try:
             await asyncio.gather(*tasks)
-        except ModerationError as err:
+        except Exception as err:
+            h_logger.error(err)
             raise HandlerError(err)
         async with self._uow as operator:
             try:
-                model = await operator.storage.get_post_by_id(cmd.pub_id)
+                model = await operator.storage.get_post_by_uid(cmd.pub_id)
                 upd_model = await moderator.set_on_moderation(model)
                 await operator.storage.update_state(upd_model)
                 await operator.commit()
-            except (DBError, ModerationError) as err:
+            except (Exception, ModerationError) as err:
                 await operator.rollback()
+                h_logger.error(err)
                 raise HandlerError from err
-        for _ in range(len(moderator.events)):
+        for _ in range(moderator.events):
             self._uow.fetch_event(moderator.dump_event())
         return None
+
+
+class SendToModerationHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: ModerateContent) -> None:
+        try:
+            fetch_content.apply_async(
+                    (
+                        cmd.mcode,
+                        cmd.uid,
+                        cmd.pub_id,
+                        )
+                    )
+            return None
+        except Exception as err:
+            h_logger.error(err)
+            raise HandlerError from err
 
 
 class FixPostAcceptedHandler(BaseCmdHandler):
@@ -253,14 +293,15 @@ class FixPostAcceptedHandler(BaseCmdHandler):
         moderator = PublicationModerator()
         async with self._uow as operator:
             try:
-                model = await operator.storage.get_post_by_id(event.pub_id)
+                model = await operator.storage.get_post_by_uid(event.pub_id)
                 upd_model = await moderator.accept_publication(model)
                 await operator.storage.update_state(upd_model)
                 await operator.commit()
-            except DBError as err:
+            except Exception as err:
+                h_logger.error(err)
                 await operator.rollback()
                 raise HandlerError from err
-        for _ in range(len(moderator.events)):
+        for _ in range(moderator.events):
             self._uow.fetch_event(moderator.dump_event())
         return None
 
@@ -272,13 +313,14 @@ class FixPostRejectedHandler(BaseCmdHandler):
         moderator = PublicationModerator()
         async with self._uow as operator:
             try:
-                model = await operator.storage.get_post_by_id(event.pub_id)
+                model = await operator.storage.get_post_by_uid(event.pub_id)
                 upd_model = await moderator.reject_publication(model)
                 await operator.storage.update_state(upd_model)
                 await operator.commit()
-            except DBError as err:
+            except Exception as err:
+                h_logger.error(err)
                 await operator.rollback()
                 raise HandlerError from err
-        for _ in range(len(moderator.events)):
+        for _ in range(moderator.events):
             self._uow.fetch_event(moderator.dump_event())
         return None

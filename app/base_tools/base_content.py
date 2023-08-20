@@ -8,8 +8,6 @@ from datetime import datetime
 
 from .base_models import AbsPublication, AbsContent, Model
 from .base_moderation import _ContentBlock
-from .base_types import SysMsgT
-from .exceptions import PublicationError
 
 
 __all__ = (
@@ -69,11 +67,6 @@ class BasePublication(AbsPublication, Model):
             self._state = self._fsm.DRAFT
         else:
             self._state = state
-        try:
-            from collections import deque
-            self._events: deque[SysMsgT] = deque()
-        except ImportError as err:
-            raise PublicationError(f"Can`t import collections module: {err}")
 
     @property
     def state(self) -> PubFSM_T:

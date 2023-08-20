@@ -14,6 +14,7 @@ __all__ = (
         "Session",
         "bootstrap_db",
         "engine",
+        "get_db_session",
         )
 
 

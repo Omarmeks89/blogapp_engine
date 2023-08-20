@@ -4,7 +4,7 @@ from typing import TypeVar
 from email.message import EmailMessage
 
 from .tasks import celery_app as app
-from settings import SMTPSettings
+from .settings import SMTPSettings
 
 
 settings = SMTPSettings()
@@ -22,6 +22,9 @@ str_handler = logging.StreamHandler()
 formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
 str_handler.setFormatter(formatter)
 smtp_logger.addHandler(str_handler)
+
+
+# smtp_logger.debug(settings)
 
 
 @app.task(

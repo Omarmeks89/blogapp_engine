@@ -52,8 +52,8 @@ class ModerationControlRecord(Serializable):
     """MCR implementation. class that controlled
     moderation process."""
     pub_id: str
-    act_dt: int
-    exp_after: int
+    act_dt: str
+    exp_after_sec: int
     blocks: dict[str, Union[str, ModerationRes]] = field(default_factory=dict)
     reports: list[str] = field(default_factory=list)
 

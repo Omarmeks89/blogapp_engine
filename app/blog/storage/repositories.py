@@ -40,7 +40,7 @@ class PostsRepository(BaseRepository):
         upd_state = (
             update(BlogPost)
             .where(BlogPost.uid == model.uid)
-            .values(state=model.state)
+            .values(_state=model.state)
             .execution_options(syncronize_session=False)
             )
         self._session.execute(upd_state)
@@ -57,7 +57,7 @@ class PostsRepository(BaseRepository):
         self._session.execute(upd_title)
         return None
 
-    def get_post_by_uid(self, pub_id: str) -> BlogPost:
+    async def get_post_by_uid(self, pub_id: str) -> BlogPost:
         self._check_session_attached()
         post = (
                 select(BlogPost)
@@ -84,7 +84,7 @@ class PostsRepository(BaseRepository):
         self._check_session_attached()
         posts = (
             select(BlogPost)
-            .where(BlogPost.author_id == author_id, BlogPost.state == state)
+            .where(BlogPost.author_id == author_id, BlogPost._state == state)
             )
         # scalars -> we will get python classes.
         posts_items = self._session.execute(posts).scalars().all()

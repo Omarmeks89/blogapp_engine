@@ -18,6 +18,9 @@ from blog.messages import (
         UpdateBody,
         UpdateHeader,
         AddToCache,
+        StartModeration,
+        ModerateContent,
+        ModerationStarted,
         )
 from blog.handlers import (
         NotifyAuthorsCmdHandler,
@@ -28,6 +31,9 @@ from blog.handlers import (
         UpdateHeaderHandler,
         UpdateBodyHandler,
         AddToCacheHandler,
+        BeginPostModerationHandler,
+        SendToModerationHandler,
+        StartModerationNotifyHandler,
         )
 from authors.messages import (
         RegisterNewAuthor,
@@ -76,6 +82,9 @@ saver = SaveAllContentHandler(cont_uow)
 header_upd = UpdateHeaderHandler(cont_uow)
 body_upd = UpdateBodyHandler(cont_uow)
 cachekeeper = AddToCacheHandler(mod_uow)
+mod_starter = BeginPostModerationHandler(mod_uow)
+mod_sender = SendToModerationHandler(cont_uow)
+mod_st_info = StartModerationNotifyHandler(cont_uow)
 
 # users ctx
 authrs_reg = CreateNewAuthorHandler(authors_uow)
@@ -90,6 +99,9 @@ Bus.subscribe(SaveAllNewPostContent, saver)
 Bus.subscribe(UpdateHeader, header_upd)
 Bus.subscribe(UpdateBody, body_upd)
 Bus.subscribe(AddToCache, cachekeeper)
+Bus.subscribe(StartModeration, mod_starter)
+Bus.subscribe(ModerateContent, mod_sender)
+Bus.subscribe(ModerationStarted, mod_st_info)
 
 # setup Bus (next ctx -> users)
 Bus.subscribe(RegisterNewAuthor, authrs_reg)

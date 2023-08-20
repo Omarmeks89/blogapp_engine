@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import MutableMapping as MMap
 from typing import Generator
 from typing import Type
@@ -12,6 +13,13 @@ from .base_types import SysMsgT
 
 HandlerT = TypeVar("HandlerT", bound="HandlerProto", contravariant=True)
 BT = TypeVar("BT", bound="MsgBus", covariant=True)
+
+bus_logger = logging.getLogger(__name__)
+bus_logger.setLevel(logging.DEBUG)
+str_handler = logging.StreamHandler()
+formatter = logging.Formatter("%(name)s %(levelname)s %(asctime)s %(message)s")
+str_handler.setFormatter(formatter)
+bus_logger.addHandler(str_handler)
 
 
 class HandlerProto(Protocol):
@@ -29,15 +37,16 @@ class MsgBus:
     def subscribe(cls, item: Type[SysMsgT], handler: HandlerT) -> None:
         key = cls.make_key(item)
         cls._map[key] = cls._map.get(key, handler)
-        print(cls._map)
+        bus_logger.debug(f"registered KEY: {key:<24} HANDLER: {handler}")
 
     @classmethod
     def unsubscribe(cls, item: Type[SysMsgT]) -> None:
         key = cls.make_key(item)
         try:
             del cls._map[key]
-        except KeyError:
-            pass
+            bus_logger.debug(f"deleted KEY: {key}")
+        except KeyError as err:
+            bus_logger.error(err)
 
     @classmethod
     def is_set(cls) -> bool:
@@ -71,6 +80,7 @@ class MsgBus:
                 t = tasks.popleft()
                 handler = self._h_map.get(type(t).__name__, None)
                 if handler is None:
+                    bus_logger.error(f"Detached key: {type(t).__name__}")
                     raise BusError("Unexpected handler.")
                 task = asyncio.create_task(handler.handle(t))
                 await asyncio.gather(task)

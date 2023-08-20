@@ -2,6 +2,7 @@ from collections import deque
 from typing import TypeVar
 from typing import TypeAlias
 from typing import cast
+from datetime import datetime
 
 from base_tools.exceptions import ModerationError, PublicationError
 from base_tools.base_content import BasePublication, ContentTypes
@@ -33,14 +34,17 @@ class PublicationModerator:
         return self._blocks != []
 
     @property
-    def events(self) -> list[SysMsgT]:
+    def events(self) -> int:
         """get events count"""
-        return list(self._events)
+        return len(self._events)
 
     def dump_event(self) -> SysMsgT:
         """dump event to next handler."""
         if self._events:
             return self._events.popleft()
+
+    def _grab_events(self, event: SysMsgT) -> None:
+        self._events.append(event)
 
     async def set_moderation_result(
             self,
@@ -77,7 +81,12 @@ class PublicationModerator:
         """create control block for results checking."""
         if not self._blocks:
             raise ModerationError("No content blocks created.")
-        mcr = ModerationControlRecord(pub_id=pub_id)
+        act_dt = datetime.utcnow()
+        mcr = ModerationControlRecord(
+                pub_id=pub_id,
+                act_dt=act_dt.strftime("%Y%m%d%H%M%S"),
+                exp_after_sec=3600,
+                )
         for block in self._blocks:
             # mcr set uid as block.mcode
             mcr.register_block(block)
@@ -117,9 +126,7 @@ class PublicationModerator:
         """invariant model. Return model to save in db.
         After Model have state MODERATION."""
         try:
-            model.moderate()
-            for event in model.events:
-                self._events.append(event)
+            model.moderate(self._grab_events)
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
@@ -132,9 +139,7 @@ class PublicationModerator:
         Model raised PostAccepted.
         Return Model back."""
         try:
-            model.accept()
-            for event in model.events:
-                self._events.append(event)
+            model.accept(self._grab_events)
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
@@ -147,9 +152,7 @@ class PublicationModerator:
         Model raised PostRejected.
         Return Model back."""
         try:
-            model.decline()
-            for event in model.events:
-                self._events.append(event)
+            model.decline(self._grab_events)
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
