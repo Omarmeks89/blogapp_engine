@@ -5,9 +5,9 @@ from datetime import datetime
 from db.base_uow import BaseCmdHandler
 from base_tools.exceptions import HandlerError, ModerationError
 from .storage.models import BlogPost
-from tasks.email import LOGIN, RECEIVER, send_email
 from tasks.moderation import fetch_content
 from base_tools.base_moderation import generate_mcode, McodeSize
+from base_tools.base_moderation import ModerationControlRecord as MCR
 from base_tools.base_content import ContentRoles
 from .content_types import TextContent
 from .schemas.response_models import PublicationCreated
@@ -15,12 +15,9 @@ from .schemas.response_models import ContentSchema, set_schema
 from .services import PublicationModerator
 from cache import get_cache_engine
 from .messages import (
-        PostRejected,
-        PostAccepted,
         StartModeration,
         SetModerationResult,
         CreateNewPost,
-        NotifyAuthor,
         AddHeaderForPost,
         AddBodyForPost,
         SaveAllNewPostContent,
@@ -29,10 +26,11 @@ from .messages import (
         AddToCache,
         ModerateContent,
         ModerationStarted,
+        ModerationFailed,
+        ModerationDoneSuccess,
         )
 
 
-mod_service = None
 ctime = datetime.now
 
 h_logger = logging.getLogger(__name__)
@@ -41,19 +39,6 @@ str_handler = logging.StreamHandler()
 formatter = logging.Formatter("%(name)s %(levelname)s %(asctime)s %(message)s")
 str_handler.setFormatter(formatter)
 h_logger.addHandler(str_handler)
-
-
-class NotifyAuthorsCmdHandler(BaseCmdHandler):
-    """let`s move it to notification service later."""
-
-    async def handle(self, cmd: NotifyAuthor) -> None:
-        """for bus test only."""
-        try:
-            send_email.delay(LOGIN, RECEIVER, cmd.msg)
-        except Exception as err:
-            h_logger.error(err)
-            pass
-        return None
 
 
 class StartModerationNotifyHandler(BaseCmdHandler):
@@ -172,13 +157,12 @@ class SetPostModerationResHandler(BaseCmdHandler):
         cache = get_cache_engine()
         mcr = cache.get_temp_obj(cmd.mcr_id)
         if mcr is None:
-            self._uow.fetch_event(
-                    f"mcr {cmd.mcr_id} expired.",
-                    )
+            h_logger.error("MCR expired or wasn`t created.")
             return None
         try:
+            mcr = MCR.from_json(mcr)
             await moderator.set_moderation_result(
-                    mcode=cmd.mcode,
+                    mcode=cmd.block_id,
                     state=cmd.state,
                     report=cmd.report,
                     mcr=mcr,
@@ -186,6 +170,7 @@ class SetPostModerationResHandler(BaseCmdHandler):
             self._uow.fetch_event(
                     AddToCache(skey=cmd.mcr_id, obj=mcr.to_json()),
                     )
+            h_logger.debug(f"MCR -> {mcr.to_json()}")
         except ModerationError as err:
             h_logger.error(err)
             raise HandlerError from err
@@ -286,10 +271,10 @@ class SendToModerationHandler(BaseCmdHandler):
             raise HandlerError from err
 
 
-class FixPostAcceptedHandler(BaseCmdHandler):
+class ModerationSuccessHandler(BaseCmdHandler):
     """react if PostAccepted event was produced."""
 
-    async def handle(self, event: PostAccepted) -> None:
+    async def handle(self, event: ModerationDoneSuccess) -> None:
         moderator = PublicationModerator()
         async with self._uow as operator:
             try:
@@ -306,10 +291,10 @@ class FixPostAcceptedHandler(BaseCmdHandler):
         return None
 
 
-class FixPostRejectedHandler(BaseCmdHandler):
+class ModerationFailedHandler(BaseCmdHandler):
     """react if PostRejected event was produced."""
 
-    async def handle(self, event: PostRejected) -> None:
+    async def handle(self, event: ModerationFailed) -> None:
         moderator = PublicationModerator()
         async with self._uow as operator:
             try:

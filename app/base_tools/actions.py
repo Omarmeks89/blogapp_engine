@@ -12,7 +12,7 @@ StateAttr: str = "_state"
 
 class ModerationRes(str, Enum):
     NOT_SET: str = "not_set"
-    DECLINED: str = "declined"
+    REJECTED: str = "rejected"
     ACCEPTED: str = "accepted"
 
 
@@ -66,9 +66,9 @@ class ModeratableBlock(_Moderatable):
     _state: ModerationRes = ModerationRes.NOT_SET
 
     def accept(self) -> None:
-        if hasattr(self, StateAttr) and self._state != ModerationRes.DECLINED:
+        if hasattr(self, StateAttr) and self._state != ModerationRes.REJECTED:
             self._state = ModerationRes.ACCEPTED
 
     def decline(self) -> None:
         if hasattr(self, StateAttr) and self._state != ModerationRes.ACCEPTED:
-            self._state = ModerationRes.DECLINED
+            self._state = ModerationRes.REJECTED

@@ -35,3 +35,14 @@ class ModerationError(Exception):
 
 class BootstrapError(Exception):
     """fail on app bootstrap."""
+    pass
+
+
+class BodyFetchingError(Exception):
+    """error on API connection."""
+    pass
+
+
+class InvalidCredentials(Exception):
+    """invalid api_secret or api_num."""
+    pass

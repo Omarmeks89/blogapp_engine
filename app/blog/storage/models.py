@@ -8,17 +8,19 @@ from base_tools.base_content import CommentStatus
 from base_tools.exceptions import PublicationError
 from base_tools.base_types import SysMsgT
 from blog.messages import (
-        PostDeleted,
-        PostRolledToDraft,
         ModerationStarted,
-        PostAccepted,
-        PostRejected,
-        PostPublished,
-        ActivateLater,
         CommentDeleted,
         CommentPublished,
         CommentRejected,
         StartCommentModeration,
+        )
+from base_tools.sys_messages import (
+        PostDeleted,
+        PostRolledToDraft,
+        PostAccepted,
+        PostRejected,
+        PostPublished,
+        ActivateLater,
         )
 
 
@@ -89,18 +91,36 @@ class BlogPost(BasePublication):
         if self._state == self._fsm.MODERATION:
             self._state = self._fsm.ACCEPTED
             callback(
-                    PostAccepted(pub_id=self.uid),
+                    PostAccepted(title=self.title, author=self.author_id),
                 )
             return None
         raise PublicationError("Can`t accept post that isn`t on moderation.")
 
-    def decline(self, callback: Callable[[SysMsgT], None]) -> None:
+    def decline(
+            self,
+            callback: Callable[[SysMsgT], None],
+            *,
+            reasons: Optional[list[str]] = None,
+            ) -> None:
         """Mark post as rejected."""
         if self._state == self._fsm.MODERATION:
             self._state = self._fsm.REJECTED
-            callback(
-                    PostRejected(pub_id=self.uid),
-                )
+            if reasons:
+                callback(
+                        PostRejected(
+                            title=self.title,
+                            author=self.author_id,
+                            reasons=reasons,
+                            ),
+                    )
+            else:
+                callback(
+                        PostRejected(
+                            title=self.title,
+                            author=self.author_id,
+                            reasons=[],
+                            ),
+                    )
             return None
         raise PublicationError("Can`t decline post that isn`t on moderation.")
 

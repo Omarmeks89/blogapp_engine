@@ -11,7 +11,6 @@ settings = SMTPSettings()
 
 
 LOGIN: str = "r5railmodels@gmail.com"
-RECEIVER: str = "r5railmodels@gmail.com"
 
 T = TypeVar("T")
 
@@ -22,9 +21,6 @@ str_handler = logging.StreamHandler()
 formatter = logging.Formatter("%(name)s %(levelname)s %(message)s")
 str_handler.setFormatter(formatter)
 smtp_logger.addHandler(str_handler)
-
-
-# smtp_logger.debug(settings)
 
 
 @app.task(

@@ -18,6 +18,7 @@ class ModerationAPISettings(BaseSettings):
     """api key for moderation servise."""
     api_user: str = ""
     api_secret: str = ""
+    border_coeff: float = 0.3
     model_config = SettingsConfigDict(
             env_file="../.env",
             env_file_encoding="utf-8",

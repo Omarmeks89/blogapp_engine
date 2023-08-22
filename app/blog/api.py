@@ -15,7 +15,8 @@ from base_tools.bus import MsgBus
 from .schemas.response_models import PublicationCreated, PublicatedPost
 from .schemas.response_models import ContentSchema, set_schema
 from .schemas.request_models import UpdateHeaderRequest, UpdateBodyRequest
-from .schemas.request_models import StartModerationRequest, SetContentCheckResult
+from .schemas.request_models import StartModerationRequest
+from .schemas.request_models import SetContentCheckResult
 from config.config import get_bus, mod_uow, cont_uow
 from cache import CacheEngine, get_cache_engine
 from authors.auth.auth import get_uid_from_token
@@ -245,14 +246,13 @@ async def comment_current_comment() -> None:
     ...
 
 
-@main.get("/moderation/posts")
+@main.get("/moderation/posts", include_in_schema=False)
 async def get_content_for_moderation(
         pub_id: str,
         rkey: str,
         c_uid: str,
         redis: CacheEngine = Depends(get_cache_engine),
         ) -> dict[str, str]:
-    """send content to mod servise via ext servise."""
     mcr = redis.get_temp_obj(pub_id)
     logger.debug(mcr)
     if mcr is None:
@@ -271,7 +271,7 @@ async def get_content_for_moderation(
         return None
 
 
-@main.post("/moderation/posts/set")
+@main.post("/moderation/posts/set", include_in_schema=False)
 async def set_moderation_result(
         request: SetContentCheckResult,
         bus: MsgBus = Depends(get_bus),

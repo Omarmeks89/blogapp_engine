@@ -79,7 +79,7 @@ class ModerationControlRecord(Serializable):
             report: str,
             ) -> None:
         """set each result after each block was moderated."""
-        if self.blocks[mcode] is not ModerationRes.NOT_SET:
+        if self.blocks[mcode] != ModerationRes.NOT_SET:
             raise Exception(f"Result for block: {mcode} is just set.")
         self.blocks[mcode] = res_state
         self.reports.append(report)
@@ -89,6 +89,6 @@ class ModerationControlRecord(Serializable):
         results = []
         for v in self.blocks.values():
             results.append(
-                True if v is ModerationRes.ACCEPTED.value else False
+                True if v == ModerationRes.ACCEPTED.value else False
                 )
         return all(results)

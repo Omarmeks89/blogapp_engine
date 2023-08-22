@@ -11,7 +11,6 @@ from base_tools.bus import MsgBus
 
 from blog.messages import (
         CreateNewPost,
-        NotifyAuthor,
         AddHeaderForPost,
         AddBodyForPost,
         SaveAllNewPostContent,
@@ -21,9 +20,16 @@ from blog.messages import (
         StartModeration,
         ModerateContent,
         ModerationStarted,
+        ModerationFailed,
+        ModerationDoneSuccess,
+        SetModerationResult,
+        )
+from base_tools.sys_messages import (
+        NotifyAuthor,
+        PostAccepted,
+        PostRejected,
         )
 from blog.handlers import (
-        NotifyAuthorsCmdHandler,
         CreateNewPostHandler,
         AddHeaderForPostHandler,
         AddBodyForPostHandler,
@@ -34,6 +40,9 @@ from blog.handlers import (
         BeginPostModerationHandler,
         SendToModerationHandler,
         StartModerationNotifyHandler,
+        ModerationFailedHandler,
+        ModerationSuccessHandler,
+        SetPostModerationResHandler,
         )
 from authors.messages import (
         RegisterNewAuthor,
@@ -42,6 +51,9 @@ from authors.messages import (
 from authors.handlers import (
         CreateNewAuthorHandler,
         ActivateAuthorHandler,
+        PostAcceptedHandler,
+        PostRejectedHandler,
+        NotifyAuthorsHandler,
         )
 
 
@@ -74,7 +86,6 @@ cont_uow = ModerationUOW(cont_repo, Session)
 authors_uow = AuthorsUOW(authors_repo, Session)
 
 # set handlers
-notifyer = NotifyAuthorsCmdHandler(mod_uow)
 creator = CreateNewPostHandler(mod_uow)
 header_creator = AddHeaderForPostHandler(cont_uow)
 body_creator = AddBodyForPostHandler(cont_uow)
@@ -85,14 +96,19 @@ cachekeeper = AddToCacheHandler(mod_uow)
 mod_starter = BeginPostModerationHandler(mod_uow)
 mod_sender = SendToModerationHandler(cont_uow)
 mod_st_info = StartModerationNotifyHandler(cont_uow)
+mod_success = ModerationSuccessHandler(mod_uow)
+mod_failed = ModerationFailedHandler(mod_uow)
+mod_res_setter = SetPostModerationResHandler(cont_uow)
 
 # users ctx
 authrs_reg = CreateNewAuthorHandler(authors_uow)
 au_activator = ActivateAuthorHandler(authors_uow)
+post_acc = PostAcceptedHandler(authors_uow)
+post_rej = PostRejectedHandler(authors_uow)
+notify = NotifyAuthorsHandler(authors_uow)
 
 # setup Bus
 Bus.subscribe(CreateNewPost, creator)
-Bus.subscribe(NotifyAuthor, notifyer)
 Bus.subscribe(AddHeaderForPost, header_creator)
 Bus.subscribe(AddBodyForPost, body_creator)
 Bus.subscribe(SaveAllNewPostContent, saver)
@@ -102,7 +118,13 @@ Bus.subscribe(AddToCache, cachekeeper)
 Bus.subscribe(StartModeration, mod_starter)
 Bus.subscribe(ModerateContent, mod_sender)
 Bus.subscribe(ModerationStarted, mod_st_info)
+Bus.subscribe(ModerationDoneSuccess, mod_success)
+Bus.subscribe(ModerationFailed, mod_failed)
+Bus.subscribe(SetModerationResult, mod_res_setter)
 
 # setup Bus (next ctx -> users)
 Bus.subscribe(RegisterNewAuthor, authrs_reg)
 Bus.subscribe(ActivateAuthor, au_activator)
+Bus.subscribe(PostAccepted, post_acc)
+Bus.subscribe(PostRejected, post_rej)
+Bus.subscribe(NotifyAuthor, notify)
