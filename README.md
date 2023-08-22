@@ -1,7 +1,7 @@
 ## Idea
 
 API for blog or small social network, based on event system and automatic AI moderation flow, using `https://sightengine.com/` 
-service and couple `celery` + `redis` for external tasks.
+service and couple `celery` + `redis` for external tasks. You can visit https://sightengine.com/ for more information.
 
 ## Stack:
 
@@ -16,4 +16,6 @@ Of course: `asyncio` `sqlalchemy` `httpx` `celery`
 Python version: `3.11.X`
 
 ## Moderation Flow:
+
+[![mod-flow.jpg](https://i.postimg.cc/9fqdgzyj/mod-flow.jpg)](https://postimg.cc/QBhKH866)
 
