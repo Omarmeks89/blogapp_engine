@@ -14,3 +14,6 @@ Project built on next technologiies:
 Of course: `asyncio` `sqlalchemy` `httpx` `celery` 
 
 Python version: `3.11.X`
+
+## Moderation Flow:
+
