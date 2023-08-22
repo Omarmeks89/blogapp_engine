@@ -15,6 +15,11 @@ Of course: `asyncio` `sqlalchemy` `httpx` `celery`
 
 Python version: `3.11.X`
 
+## Startup project:
+
+```bash
+```
+
 ## Moderation Flow:
 
 [![mod-flow.jpg](https://i.postimg.cc/9fqdgzyj/mod-flow.jpg)](https://postimg.cc/QBhKH866)
