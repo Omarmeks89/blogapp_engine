@@ -170,7 +170,6 @@ def moderate_text_ml(self: TaskT, data: dict, mcode: str, pub_id: str) -> None:
                 )
             logger.error(msg)
             raise InvalidCredentials(msg)
-        logger.debug(f"{resp.text}, {type(resp.text)}")
         mod_resp = json.loads(resp.text)
         report = build_moderation_report(ModerationMode.ML, mod_resp)
         send_moderation_result.apply_async(
