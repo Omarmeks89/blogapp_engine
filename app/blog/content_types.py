@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 
 from base_tools.base_content import BaseContentPreset, ContentTypes
-from base_tools.base_content import ContentRoles
 from base_tools.base_moderation import _ContentBlock
 from base_tools.base_moderation import McodeSize, generate_mcode
 from base_tools.actions import ModeratableBlock
@@ -48,21 +47,3 @@ class TextContent(BaseContentPreset):
                 pub_id=cls.pub_id,
                 mcode=mcode,
                 )
-
-
-@dataclass
-class Header(TextContent):
-
-    def __post_init__(self) -> None:
-        """specify role."""
-        super().__post_init__(self)
-        self._role = ContentRoles.HEADER
-
-
-@dataclass
-class Body(TextContent):
-
-    def __post_init__(self) -> None:
-        """specify role."""
-        super().__post_init__(self)
-        self._role = ContentRoles.BODY

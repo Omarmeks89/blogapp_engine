@@ -90,7 +90,7 @@ async def get_post_by_id(
                 )
 
 
-@author.patch("/edit/{pub_id}/update_header")
+@author.patch("/edit/update_header")
 async def update_header(
         request: UpdateHeaderRequest,
         user_id: str = Depends(get_uid_from_token),
@@ -111,7 +111,7 @@ async def update_header(
         raise HTTPException(status_code=404, detail="Not found.")
 
 
-@author.patch("/edit/{pub_id}/update_text")
+@author.patch("/edit/update_text")
 async def update_body(
         request: UpdateBodyRequest,
         user_id: str = Depends(get_uid_from_token),
@@ -132,7 +132,7 @@ async def update_body(
         raise HTTPException(status_code=404, detail="Not found.")
 
 
-@author.patch("/edit/{pub_id}/pub")
+@author.patch("/edit/pub")
 async def pub(
         cmd: StartModerationRequest,
         user_id: str = Depends(get_uid_from_token),
@@ -155,7 +155,7 @@ async def pub(
         raise HTTPException(status_code=404, detail="Ups.. sth was wrong...")
 
 
-@author.patch("/moderated/{pub_id}/activate")
+@author.patch("/moderated/activate")
 async def activate_moderated_post() -> None:
     """activate post if it was successfully moderated."""
     ...
@@ -177,7 +177,7 @@ async def get_rejected_post(
     ...
 
 
-@author.post("/rejected/{pub_id}/correct")
+@author.post("/rejected/correct")
 async def correct_rejected_post(
         user_id: str = Depends(get_uid_from_token),
         ) -> RedirectResponse:
@@ -208,7 +208,7 @@ async def get_selected_post(pub_id: str) -> PublicatedPost:
     ...
 
 
-@main.patch("/{pub_id}/like")
+@main.patch("/like")
 async def like(
         pub_id: str,
         user_id: str = Depends(get_uid_from_token),
@@ -224,7 +224,7 @@ async def like(
     return None
 
 
-@main.patch("/{pub_id}/dislike")
+@main.patch("/dislike")
 async def dislike(
         pub_id: str,
         user_id: str = Depends(get_uid_from_token),
@@ -234,15 +234,9 @@ async def dislike(
     ...
 
 
-@main.post("/{pub_id}/new_comment")
+@main.post("/new_comment")
 async def comment_current_post() -> None:
     """comment current post (inside, not from main)."""
-    ...
-
-
-@main.post("/{pub_id}/{comment_id}/new_comment")
-async def comment_current_comment() -> None:
-    """comment current comment."""
     ...
 
 

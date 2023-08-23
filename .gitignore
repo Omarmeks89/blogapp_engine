@@ -4,3 +4,8 @@ blogenv
 __pycache__
 __*__
 mypy*.txt
+*.egg-*
+alembic.ini
+*log.*
+*.rdb
+*key

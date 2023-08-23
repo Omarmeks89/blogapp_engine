@@ -20,7 +20,7 @@ Python version: `3.11.X`
 ```bash
 git clone git@github.com:Omarmeks89/blogapp_engine.git app_dir
 ```
-Setup create venv:
+Create venv:
 ```bash
 cd app_dir
 python -m venv venv

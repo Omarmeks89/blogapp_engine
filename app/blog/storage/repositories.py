@@ -124,11 +124,39 @@ class ContentRepository(BaseRepository):
                 )
         return self._session.execute(content).scalar()
 
+    async def lock(self, content_uid: str) -> None:
+        """lock content for editing after moderation started."""
+        self._check_session_attached()
+        locked = (
+                update(TextContent)
+                .where(TextContent.uid == content_uid)
+                .values(locked=1)
+                .execution_options(syncronize_session="fetch")
+                )
+        self._session.execute(locked)
+        return None
+
+    async def release_lock(self, content_uid: str) -> None:
+        """release lock in need to rollback content to draft."""
+        self._check_session_attached()
+        locked = (
+                update(TextContent)
+                .where(TextContent.uid == content_uid)
+                .values(locked=0)
+                .execution_options(syncronize_session="fetch")
+                )
+        self._session.execute(locked)
+        return None
+
     async def update_body(self, uid: str, pub_id: str, body: str) -> None:
         self._check_session_attached()
         upd_body = (
             update(TextContent)
-            .where(TextContent.uid == uid, TextContent.pub_id == pub_id)
+            .where(
+                TextContent.uid == uid,
+                TextContent.pub_id == pub_id,
+                TextContent.locked == 0,
+                )
             .values(body=body)
             .execution_options(syncronize_session=False)
             )

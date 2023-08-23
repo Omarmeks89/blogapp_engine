@@ -54,7 +54,7 @@ async def create_new_author(
     return RedirectResponse("/main", status_code=303)
 
 
-@users.patch("/activate/{uid}")
+@users.patch("/activate")
 async def activate_author(
         uid: str = Depends(get_uid_from_token),
         bus: MsgBus = Depends(get_bus),

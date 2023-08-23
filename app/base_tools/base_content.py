@@ -94,6 +94,7 @@ class BaseContentPreset(AbsContent):
     pub_id: str
     creation_dt: datetime
     body: str = field(default_factory=str)
+    locked: int = 0
     _kind: ContentTypes = ContentTypes.NONE
     _role: ContentRoles = ContentRoles.NOTSET
 
@@ -101,6 +102,18 @@ class BaseContentPreset(AbsContent):
     def __post_init__(self) -> None:
         """define exact _kind."""
         pass
+
+    @property
+    def locked(self) -> bool:
+        return self.locked == 1
+
+    def lock(self) -> None:
+        """lock content at top level."""
+        self.locked = 1
+
+    def release_lock(self) -> None:
+        """release lock at top if rollback needed."""
+        self.locked = 0
 
     def set_role(self, role: ContentRoles) -> None:
         """set new role for content."""
