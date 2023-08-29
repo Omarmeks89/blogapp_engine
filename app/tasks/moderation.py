@@ -119,7 +119,7 @@ def fetch_content(self: TaskT, mcode: str, cont_id: str, pub_id: str) -> None:
             timeout=TimeoutSec.DEF_TOUT,
             event_hooks={
                 "request": [on_request_hook],
-                "response": [on_request_hook],
+                "response": [on_response_hook],
                 },
             ) as client:
         try:
@@ -162,7 +162,7 @@ def moderate_text_ml(self: TaskT, data: dict, mcode: str, pub_id: str) -> None:
             timeout=TimeoutSec.DEF_TOUT,
             event_hooks={
                 "request": [on_request_hook],
-                "response": [on_request_hook],
+                "response": [on_response_hook],
                 },
             ) as client:
         try:
@@ -199,7 +199,7 @@ def send_moderation_result(
             timeout=TimeoutSec.DEF_TOUT,
             event_hooks={
                 "request": [on_request_hook],
-                "response": [on_request_hook],
+                "response": [on_response_hook],
                 },
             follow_redirects=True,
             ) as client:

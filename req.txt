@@ -2,7 +2,7 @@ alembic==1.11.3
 amqp==5.1.1
 annotated-types==0.5.0
 anyio==3.7.1
--e git+ssh://git@github.com/Omarmeks89/blogapp_engine.git@d287b6b7dad402a63e6cff385889c6b6a33a0960#egg=async_blog_engine
+-e git+ssh://git@github.com/Omarmeks89/blogapp_engine.git@3f3447eca06af250a40db92747e5648b4abe3778#egg=async_blog_engine
 billiard==4.1.0
 celery==5.3.1
 certifi==2023.7.22
