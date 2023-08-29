@@ -28,8 +28,8 @@ __all__ = [
         ]
 
 
-main = APIRouter(prefix="/main")  # rename to main
-author = APIRouter(prefix="/main/{user_id}")  # for registered users
+main = APIRouter(prefix="/main")
+author = APIRouter(prefix="/main/{user_id}")
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
