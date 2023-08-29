@@ -65,13 +65,20 @@ class MsgBus:
     def make_key(item: Type[SysMsgT]) -> str:
         return item.__name__
 
-    async def fetch_events(self, hnd: HandlerT, tasks: deque[SysMsgT]) -> None:
-        for t in hnd.events:
-            tasks.append(t)
+    async def fetch_events(
+            self,
+            handlers: deque[HandlerT],
+            tasks: deque[SysMsgT],
+            ) -> None:
+        while handlers:
+            hnd = handlers.popleft()
+            for t in hnd.events:
+                tasks.append(t)
         return None
 
     async def handle(self, item: SysMsgT) -> None:
         tasks: deque[SysMsgT] = deque()
+        handlers: deque[HandlerT] = deque()
         tasks.append(item)
         is_active = True
         while is_active:
@@ -80,11 +87,12 @@ class MsgBus:
                 t = tasks.popleft()
                 handler = self._h_map.get(type(t).__name__, None)
                 if handler is None:
-                    bus_logger.error(f"Detached key: {type(t).__name__}")
+                    bus_logger.error(f"Detached key: {type(t).__name__}:{t}")
                     raise BusError("Unexpected handler.")
+                handlers.append(handler)
                 task = asyncio.create_task(handler.handle(t))
                 await asyncio.gather(task)
-            ft = asyncio.create_task(self.fetch_events(handler, tasks))
+            ft = asyncio.create_task(self.fetch_events(handlers, tasks))
             await asyncio.gather(ft)
             if not tasks:
                 is_active = False

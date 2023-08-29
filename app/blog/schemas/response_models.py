@@ -11,13 +11,13 @@ SchemaT = TypeVar("SchemaT", bound="ContentSchema")
 
 class Header(BaseModel):
     uid: str = ""
-    body: str = ""
+    body: str = "header here..."
     max_len: int = 256
 
 
 class Body(BaseModel):
     uid: str = ""
-    body: str = ""
+    body: str = "text here..."
     max_len: int = 2048
 
 

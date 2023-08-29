@@ -103,10 +103,6 @@ class BaseContentPreset(AbsContent):
         """define exact _kind."""
         pass
 
-    @property
-    def locked(self) -> bool:
-        return self.locked == 1
-
     def lock(self) -> None:
         """lock content at top level."""
         self.locked = 1

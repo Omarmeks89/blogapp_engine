@@ -64,7 +64,6 @@ def on_request_hook(request: httpx.Request) -> None:
     """event hook on httpx-request."""
     logger.debug(
             f"REQ_URL: {request.url}\n "
-            f"REQ_HEAD:\n\t{request.headers}\n"
             )
 
 
@@ -137,6 +136,15 @@ def fetch_content(self: TaskT, mcode: str, cont_id: str, pub_id: str) -> None:
                     )
             raise self.retry(exc=err, contdown=TimeUnit.MINUTE)
         moderate_text_ml.apply_async((responce.json(), mcode, pub_id))
+        # moderate_mock.apply_async((responce.json(), mcode, pub_id))
+
+
+@celery_app.task(bind=True, retry_kwargs={"max_retries": 3})
+def moderate_mock(self: TaskT, data: dict, mcode: str, pub_id: str) -> None:
+    """mock for e2e testing without API GW."""
+    send_moderation_result.apply_async(
+        ("mock_done", mcode, pub_id, "accepted"),
+        )
 
 
 @celery_app.task(bind=True, retry_kwargs={"max_retries": 3})

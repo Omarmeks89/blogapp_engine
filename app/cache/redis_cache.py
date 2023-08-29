@@ -188,7 +188,7 @@ class CacheEngine(AbstractCacheEngine):
             logger.debug(msg)
 
     def _conn_alive(self) -> None:
-        if not hasattr(self, "_conn"):
+        if not hasattr(self, "_conn") or not self._conn.ping():
             raise CacheSessionExpired("Cache session was closed. Reconnect")
 
     def set_temp_obj(self, key: str, obj: JSONFmt, exp_sec: int) -> None:
@@ -199,16 +199,38 @@ class CacheEngine(AbstractCacheEngine):
         self._conn_alive()
         return self._conn.get(key)
 
-    def set_mcr_obj(self, hkey: str, internal_key: str, obj: JSONFmt) -> None:
+    def set_ht_obj(self, hkey: str, payload: dict) -> None:
         """save system-obj -> ModerationControlBlock to Cache."""
         self._conn_alive()
         try:
-            self._conn.hset(hkey, mapping={internal_key, obj})
+            self._conn.hset(hkey, mapping=payload)
         except redis.exceptions.ResponseError as err:
             logger.error(err)
             raise Exception(err)
 
-    def get_mcr_obj(self, hkey: str, internal_key: str) -> Optional[JSONFmt]:
+    def get_ht_obj(self, hkey: str) -> Optional[dict]:
         """get serializer mcr-obj."""
         self._conn_alive()
-        return self._conn.hget(hkey, internal_key)
+        return self._conn.hgetall(hkey)
+
+    def set_ht_field(self, hkey: str, field: str, payload: Any) -> None:
+        self._conn_alive()
+        try:
+            self._conn.hset(hkey, key=field, value=payload)
+        except redis.exceptions.ResponseError as err:
+            logger.error(err)
+            raise Exception(err)
+
+    def del_ht_obj(self, hkey: str) -> None:
+        """del object from hash table."""
+        self._conn_alive()
+        keys = []
+        try:
+            keys = self._conn.hkeys(hkey)
+        except redis.exceptions.ResponseError as err:
+            logger.error(err)
+            raise Exception(err)
+        pipe = self._conn.pipeline()
+        for k in keys:
+            pipe.hdel(hkey, k)
+        pipe.execute()

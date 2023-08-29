@@ -22,10 +22,9 @@ class SetModerationResult(Command):
     report: str
 
 
-class ModerationStarted(Event):
+class CheckModerationResult(Command):
+    """check results stored in cache after moderation."""
     pub_id: str
-    author_id: str
-    pub_title: str
 
 
 class ModerationFailed(Event):
@@ -125,6 +124,31 @@ class AddToCache(Command):
     """add any item to cache."""
     skey: str
     obj: str
+
+
+class RegisterMCR(Command):
+    """register control record in cache."""
+    skey: str
+    obj: str
+    blocks: dict
+
+
+class UpdateMCR(Command):
+    """update serialized MCR string with setted mod
+    results."""
+    skey: str
+    obj: str
+
+
+class DeleteMCR(Command):
+    """remove control record after
+    moderation finish."""
+    pub_id: str
+
+
+class LockContent(Command):
+    """lock moderated content on editing."""
+    content: list[dict]
 
 
 class ModerateContent(Command):

@@ -19,10 +19,14 @@ from blog.messages import (
         AddToCache,
         StartModeration,
         ModerateContent,
-        ModerationStarted,
         ModerationFailed,
         ModerationDoneSuccess,
         SetModerationResult,
+        RegisterMCR,
+        UpdateMCR,
+        DeleteMCR,
+        CheckModerationResult,
+        LockContent,
         )
 from base_tools.sys_messages import (
         NotifyAuthor,
@@ -43,6 +47,10 @@ from blog.handlers import (
         ModerationFailedHandler,
         ModerationSuccessHandler,
         SetPostModerationResHandler,
+        RegisterMCRHandler,
+        SetResultToCacheHandler,
+        UpdateMCRHandler,
+        DeleteMCRHandler,
         )
 from authors.messages import (
         RegisterNewAuthor,
@@ -100,6 +108,12 @@ mod_success = ModerationSuccessHandler(mod_uow)
 mod_failed = ModerationFailedHandler(mod_uow)
 mod_res_setter = SetPostModerationResHandler(cont_uow)
 
+# set to cache
+cache_saver = SetResultToCacheHandler(cont_uow)
+mcr_regr = RegisterMCRHandler(cont_uow)
+upd_mcr = UpdateMCRHandler(cont_uow)
+del_mcr = DeleteMCRHandler(cont_uow)
+
 # users ctx
 authrs_reg = CreateNewAuthorHandler(authors_uow)
 au_activator = ActivateAuthorHandler(authors_uow)
@@ -117,10 +131,14 @@ Bus.subscribe(UpdateBody, body_upd)
 Bus.subscribe(AddToCache, cachekeeper)
 Bus.subscribe(StartModeration, mod_starter)
 Bus.subscribe(ModerateContent, mod_sender)
-Bus.subscribe(ModerationStarted, mod_st_info)
+Bus.subscribe(LockContent, mod_st_info)
 Bus.subscribe(ModerationDoneSuccess, mod_success)
 Bus.subscribe(ModerationFailed, mod_failed)
-Bus.subscribe(SetModerationResult, mod_res_setter)
+Bus.subscribe(CheckModerationResult, mod_res_setter)
+Bus.subscribe(SetModerationResult, cache_saver)
+Bus.subscribe(RegisterMCR, mcr_regr)
+Bus.subscribe(UpdateMCR, upd_mcr)
+Bus.subscribe(DeleteMCR, del_mcr)
 
 # setup Bus (next ctx -> users)
 Bus.subscribe(RegisterNewAuthor, authrs_reg)

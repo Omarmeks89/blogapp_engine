@@ -4,6 +4,7 @@ from typing import Type
 
 from sqlalchemy import Table
 from sqlalchemy import update, select
+from sqlalchemy.sql.expression import bindparam
 
 from db.base_repositories import BaseRepository, RepoState
 from base_tools.base_content import PostStatus
@@ -14,7 +15,12 @@ from ..content_types import TextContent
 StatusT = TypeVar("StatusT", PostStatus, str)
 
 
-logger = logging.getLogger("BLOG_LOG")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+str_handler = logging.StreamHandler()
+formatter = logging.Formatter("%(name)s %(levelname)s %(asctime)s %(message)s")
+str_handler.setFormatter(formatter)
+logger.addHandler(str_handler)
 
 
 class PostsRepository(BaseRepository):
@@ -124,28 +130,30 @@ class ContentRepository(BaseRepository):
                 )
         return self._session.execute(content).scalar()
 
-    async def lock(self, content_uid: str) -> None:
+    async def lock(self, to_lock: dict) -> None:
         """lock content for editing after moderation started."""
         self._check_session_attached()
+        self._session.begin()
         locked = (
                 update(TextContent)
-                .where(TextContent.uid == content_uid)
-                .values(locked=1)
-                .execution_options(syncronize_session="fetch")
+                .where(TextContent.uid == bindparam("c_uid"))
+                .values(locked=bindparam("lock"))
                 )
-        self._session.execute(locked)
+        self._session.execute(locked, to_lock)
+        logger.debug(locked)
         return None
 
-    async def release_lock(self, content_uid: str) -> None:
+    async def release_lock(self, to_unlock: dict) -> None:
         """release lock in need to rollback content to draft."""
         self._check_session_attached()
-        locked = (
+        self._session.begin()
+        unlocked = (
                 update(TextContent)
-                .where(TextContent.uid == content_uid)
-                .values(locked=0)
-                .execution_options(syncronize_session="fetch")
+                .where(TextContent.uid == bindparam("c_uid"))
+                .values(locked=bindparam("unlock"))
                 )
-        self._session.execute(locked)
+        self._session.execute(unlocked, to_unlock)
+        logger.debug(unlocked)
         return None
 
     async def update_body(self, uid: str, pub_id: str, body: str) -> None:
@@ -154,12 +162,12 @@ class ContentRepository(BaseRepository):
             update(TextContent)
             .where(
                 TextContent.uid == uid,
-                TextContent.pub_id == pub_id,
                 TextContent.locked == 0,
                 )
             .values(body=body)
             .execution_options(syncronize_session=False)
             )
+        logger.debug(upd_body)
         self._session.execute(upd_body)
         return None
 

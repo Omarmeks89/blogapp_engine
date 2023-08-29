@@ -8,7 +8,6 @@ from base_tools.base_content import CommentStatus
 from base_tools.exceptions import PublicationError
 from base_tools.base_types import SysMsgT
 from blog.messages import (
-        ModerationStarted,
         CommentDeleted,
         CommentPublished,
         CommentRejected,
@@ -52,19 +51,25 @@ class BlogPost(BasePublication):
         self.title = title
         self.creation_dt = creation_dt
 
-    def remove(self) -> None:
+    def remove(
+            self,
+            callback: Callable[[SysMsgT], None],
+            ) -> None:
         if self._state in (self._fsm.DELETED, self._fsm.MODERATION):
             raise PublicationError("Can`t delete removed or processed post.")
         self._state = self._fsm.DELETED
-        self._events.append(
+        callback(
             PostDeleted(pub_id=self._uid),
             )
 
-    def rollback_to_draft(self) -> None:
+    def rollback_to_draft(
+            self,
+            callback: Callable[[SysMsgT], None],
+            ) -> None:
         """we can rollback from each state after moderation."""
         if self._state in (self._fsm.REJECTED, self._fsm.ACCEPTED):
             self._state = self._fsm.DRAFT
-            self._events.append(
+            callback(
                 PostRolledToDraft(pub_id=self._uid),
                 )
         return None
@@ -74,13 +79,6 @@ class BlogPost(BasePublication):
         notify author about process started."""
         if self._state == self._fsm.DRAFT:
             self._state = self._fsm.MODERATION
-            callback(
-                    ModerationStarted(
-                            pub_id=self.uid,
-                            author_id=self.author_id,
-                            pub_title=self.title,
-                        ),
-                )
             return None
         raise PublicationError(
                 f"Can`t set on moderation. Curr status: {self._state}",
@@ -105,22 +103,14 @@ class BlogPost(BasePublication):
         """Mark post as rejected."""
         if self._state == self._fsm.MODERATION:
             self._state = self._fsm.REJECTED
-            if reasons:
-                callback(
-                        PostRejected(
-                            title=self.title,
-                            author=self.author_id,
-                            reasons=reasons,
-                            ),
-                    )
-            else:
-                callback(
-                        PostRejected(
-                            title=self.title,
-                            author=self.author_id,
-                            reasons=[],
-                            ),
-                    )
+            _reasons = reasons or ["", ]
+            callback(
+                    PostRejected(
+                        title=self.title,
+                        author=self.author_id,
+                        reasons=_reasons,
+                        ),
+                )
             return None
         raise PublicationError("Can`t decline post that isn`t on moderation.")
 

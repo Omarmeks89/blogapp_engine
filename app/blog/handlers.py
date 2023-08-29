@@ -7,7 +7,6 @@ from base_tools.exceptions import HandlerError, ModerationError
 from .storage.models import BlogPost
 from tasks.moderation import fetch_content
 from base_tools.base_moderation import generate_mcode, McodeSize
-from base_tools.base_moderation import ModerationControlRecord as MCR
 from base_tools.base_content import ContentRoles
 from .content_types import TextContent
 from .schemas.response_models import PublicationCreated
@@ -25,9 +24,13 @@ from .messages import (
         UpdateBody,
         AddToCache,
         ModerateContent,
-        ModerationStarted,
         ModerationFailed,
         ModerationDoneSuccess,
+        RegisterMCR,
+        UpdateMCR,
+        DeleteMCR,
+        CheckModerationResult,
+        LockContent,
         )
 
 
@@ -43,9 +46,21 @@ h_logger.addHandler(str_handler)
 
 class StartModerationNotifyHandler(BaseCmdHandler):
 
-    async def handle(self, cmd: ModerationStarted) -> None:
-        """NotImplemented."""
-        pass
+    async def handle(self, cmd: LockContent) -> None:
+        """set moderated content as locked."""
+        async with self._uow as operator:
+            content = operator.storage
+            lock = self._task(content.lock(cmd.content))
+            try:
+                await asyncio.gather(lock)
+                await operator.commit()
+            except Exception as err:
+                await operator.rollback()
+                h_logger.error(err)
+                raise HandlerError(err)
+            ct = await content.get_all_post_content(cmd.content[0]["c_uid"])
+            h_logger.debug(ct)
+            return None
 
 
 class CreateNewPostHandler(BaseCmdHandler):
@@ -149,28 +164,82 @@ class AddToCacheHandler(BaseCmdHandler):
         return None
 
 
-class SetPostModerationResHandler(BaseCmdHandler):
+class RegisterMCRHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: RegisterMCR) -> None:
+        cached = {
+                "mcr": cmd.obj,
+                **cmd.blocks,
+                }
+        try:
+            redis = get_cache_engine()
+            redis.set_ht_obj(hkey=cmd.skey, payload=cached)
+        except Exception as err:
+            h_logger.error(err)
+            raise HandlerError(err)
+        return None
+
+
+class UpdateMCRHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: UpdateMCR) -> None:
+        redis = get_cache_engine()
+        try:
+            redis.set_ht_field(hkey=cmd.skey, field="mcr", payload=cmd.obj)
+        except Exception as err:
+            h_logger.error(err)
+            raise HandlerError(err)
+        return None
+
+
+class DeleteMCRHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: DeleteMCR) -> None:
+        redis = get_cache_engine()
+        try:
+            redis.del_ht_obj(hkey=cmd.pub_id)
+        except Exception as err:
+            h_logger.error(err)
+            raise HandlerError(err)
+        return None
+
+
+class SetResultToCacheHandler(BaseCmdHandler):
 
     async def handle(self, cmd: SetModerationResult) -> None:
+        try:
+            redis = get_cache_engine()
+            redis.set_ht_field(cmd.mcr_id, cmd.block_id, cmd.state)
+            redis.set_temp_obj(cmd.block_id, cmd.report, 600)
+        except Exception as err:
+            h_logger.error(err)
+            raise HandlerError(err)
+        self._uow.fetch_event(
+                CheckModerationResult(
+                    pub_id=cmd.mcr_id,
+                    ),
+                )
+        return None
+
+
+class SetPostModerationResHandler(BaseCmdHandler):
+
+    async def handle(self, cmd: CheckModerationResult) -> None:
         """Set block moderation result"""
         moderator = PublicationModerator()
         cache = get_cache_engine()
-        mcr = cache.get_temp_obj(cmd.mcr_id)
-        if mcr is None:
+        fetched_mcr = cache.get_ht_obj(cmd.pub_id)
+        if fetched_mcr is None:
             h_logger.error("MCR expired or wasn`t created.")
             return None
         try:
-            mcr = MCR.from_json(mcr)
-            await moderator.set_moderation_result(
-                    mcode=cmd.block_id,
-                    state=cmd.state,
-                    report=cmd.report,
-                    mcr=mcr,
-                    )
-            self._uow.fetch_event(
-                    AddToCache(skey=cmd.mcr_id, obj=mcr.to_json()),
-                    )
-            h_logger.debug(f"MCR -> {mcr.to_json()}")
+            h_logger.debug(fetched_mcr)
+            mcr = await moderator.mcr_from_json(fetched_mcr["mcr"])
+            for k in mcr.blocks:
+                report = cache.get_temp_obj(k)
+                if report:
+                    await moderator.set_mcr(k, fetched_mcr[k], report, mcr)
+            await moderator.set_moderation_result(mcr)
         except ModerationError as err:
             h_logger.error(err)
             raise HandlerError from err
@@ -288,6 +357,7 @@ class ModerationSuccessHandler(BaseCmdHandler):
                 raise HandlerError from err
         for _ in range(moderator.events):
             self._uow.fetch_event(moderator.dump_event())
+        h_logger.debug(self._uow._events)
         return None
 
 

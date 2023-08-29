@@ -247,11 +247,11 @@ async def get_content_for_moderation(
         c_uid: str,
         redis: CacheEngine = Depends(get_cache_engine),
         ) -> dict[str, str]:
-    mcr = redis.get_temp_obj(pub_id)
+    mcr = redis.get_ht_obj(pub_id)
     logger.debug(mcr)
     if mcr is None:
         raise HTTPException(status_code=404, detail="MCR not found.")
-    mcr = MCR.from_json(mcr)
+    mcr = MCR.from_json(mcr["mcr"])
     if not mcr.mcode_registered(rkey):
         raise HTTPException(status_code=403, detail="Forbidden.")
     async with cont_uow as content_provider:

@@ -2,6 +2,8 @@ from collections import deque
 from typing import TypeVar
 from typing import TypeAlias
 from typing import cast
+from typing import Optional
+from typing import Callable
 from datetime import datetime
 
 from base_tools.exceptions import ModerationError, PublicationError
@@ -10,9 +12,10 @@ from base_tools.base_moderation import _ContentBlock, ModerationControlRecord
 from base_tools.base_moderation import generate_mcode
 from base_tools.actions import ModerationRes
 from base_tools.base_types import SysMsgT
-from .messages import ModerationFailed, ModerationDoneSuccess, AddToCache
-from .messages import ModerateContent
+from .messages import ModerationFailed, ModerationDoneSuccess, LockContent
+from .messages import ModerateContent, RegisterMCR, DeleteMCR, UpdateMCR
 from .content_types import TextBlock
+from base_tools.actions import JSONFmt
 
 
 PubCV = TypeVar("PubCV", bound=BasePublication, contravariant=True)
@@ -43,36 +46,59 @@ class PublicationModerator:
         if self._events:
             return self._events.popleft()
 
-    def _grab_events(self, event: SysMsgT) -> None:
-        self._events.append(event)
+    def _grab_events(self) -> Callable[[SysMsgT], None]:
+        _obj = self
+
+        def _set_event_from_model(event: SysMsgT) -> None:
+            nonlocal _obj
+            if hasattr(_obj, "_events"):
+                _obj._events.append(event)
+                return None
+            raise Exception(f"{_obj} haven`t attr <'_events'>.")
+
+        return _set_event_from_model
 
     async def set_moderation_result(
+            self,
+            mcr: ModerationControlRecord
+            ) -> None:
+        """Need to parse SetModerationResult."""
+        if mcr.finished():
+            if mcr.done_success():
+                self._events.append(
+                        ModerationDoneSuccess(pub_id=mcr.pub_id),
+                        )
+            else:
+                self._events.append(
+                    ModerationFailed(
+                        pub_id=mcr.pub_id,
+                        reasons=mcr.reports,
+                        ),
+                    )
+            rem = DeleteMCR(pub_id=mcr.pub_id)
+            self._events.append(rem)
+        else:
+            upd = UpdateMCR(skey=mcr.pub_id, obj=mcr.to_json())
+            self._events.append(upd)
+        return None
+
+    async def set_mcr(
             self,
             mcode: str,
             state: ModerationRes,
             report: str,
             mcr: ModerationControlRecord
             ) -> None:
-        """Need to parse SetModerationResult."""
         try:
             mcr.set_moderation_result(mcode, state, report)
-            # if all blocks returned from moderation.
-            if mcr.finished():
-                if mcr.done_success():
-                    self._events.append(
-                            ModerationDoneSuccess(pub_id=mcr.pub_id),
-                            )
-                else:
-                    reports = [report for report in mcr.reports]
-                    self._events.append(
-                        ModerationFailed(pub_id=mcr.pub_id, reasons=reports),
-                        )
-            return None
-        except Exception as err:
-            raise ModerationError(
-                    f"{type(self).__name__}:{__name__} failed.\n"
-                    f"\tTrapped Exception: {err}.\n"
-                    )
+        except Exception:
+            # add event for support
+            pass
+        return None
+
+    @staticmethod
+    async def mcr_from_json(json_str: JSONFmt) -> ModerationControlRecord:
+        return ModerationControlRecord.from_json(json_str)
 
     async def make_mcr(
             self,
@@ -88,10 +114,17 @@ class PublicationModerator:
                 exp_after_sec=3600,
                 )
         for block in self._blocks:
-            # mcr set uid as block.mcode
             mcr.register_block(block)
-        cmd = AddToCache(skey=mcr.pub_id, obj=mcr.to_json())
-        self._events.append(cmd)
+        cmd = RegisterMCR(
+                skey=mcr.pub_id,
+                obj=mcr.to_json(),
+                blocks=mcr.blocks,
+                )
+        to_lock = LockContent(
+                content=[{"c_uid": k.uid, "lock": 1} for k in self._blocks],
+                )
+        for c in (cmd, to_lock):
+            self._events.append(c)
         return mcr
 
     async def build_content_blocks(
@@ -126,7 +159,7 @@ class PublicationModerator:
         """invariant model. Return model to save in db.
         After Model have state MODERATION."""
         try:
-            model.moderate(self._grab_events)
+            model.moderate(self._grab_events())
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
@@ -139,7 +172,7 @@ class PublicationModerator:
         Model raised PostAccepted.
         Return Model back."""
         try:
-            model.accept(self._grab_events)
+            model.accept(self._grab_events())
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
@@ -147,12 +180,14 @@ class PublicationModerator:
     async def reject_publication(
             self,
             model: PubCV,
+            *,
+            reasons: Optional[list[str]] = None,
             ) -> PubVT:
         """fetch event from model.
         Model raised PostRejected.
         Return Model back."""
         try:
-            model.decline(self._grab_events)
+            model.decline(self._grab_events(), reasons=reasons)
             return cast(PubVT, model)
         except PublicationError as err:
             raise ModerationError(err)
